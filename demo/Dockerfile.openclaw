@@ -1,0 +1,29 @@
+# OpenClaw Gateway + fluss-hook plugin
+#
+# Based on the official OpenClaw image — no source build needed.
+# Prerequisites: run scripts/build-fluss-node.sh to compile fluss-node for Linux.
+#
+# Build context: openclaw-fluss-hook project root (parent of demo/)
+# See scripts/build.sh
+
+FROM ghcr.io/openclaw/openclaw:main
+
+USER root
+
+# --- Pre-built fluss-node binary (from build-fluss-node.sh) ---
+COPY demo/fluss-node-lib/ /app/fluss-node-lib/
+
+# --- fluss-hook plugin source ---
+COPY index.ts /app/plugins/fluss-hook/index.ts
+COPY src/ /app/plugins/fluss-hook/src/
+COPY openclaw.plugin.json /app/plugins/fluss-hook/openclaw.plugin.json
+COPY package.json /app/plugins/fluss-hook/package.json
+COPY tsconfig.json /app/plugins/fluss-hook/tsconfig.json
+
+# Link fluss-node into plugin's node_modules
+RUN mkdir -p /app/plugins/fluss-hook/node_modules \
+    && ln -s /app/fluss-node-lib /app/plugins/fluss-hook/node_modules/fluss-node
+
+RUN chown -R node:node /app/fluss-node-lib /app/plugins
+
+USER node

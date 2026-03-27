@@ -1,0 +1,24 @@
+{
+  "name": "@openclaw/fluss-hook",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin to log all messages to Apache Fluss",
+  "type": "module",
+  "dependencies": {
+    "fluss-node": "file:../fluss-rust/bindings/node"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

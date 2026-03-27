@@ -1,0 +1,98 @@
+services:
+  # ---- Fluss Cluster ----
+  zookeeper:
+    image: zookeeper:3.9.2
+    restart: always
+
+  coordinator-server:
+    image: apache/fluss:0.9.0-incubating-rc2
+    command: coordinatorServer
+    depends_on:
+      - zookeeper
+    environment:
+      - |
+        FLUSS_PROPERTIES=
+        zookeeper.address: zookeeper:2181
+        bind.listeners: FLUSS://coordinator-server:9123
+        remote.data.dir: /tmp/fluss/remote-data
+    volumes:
+      - fluss-data:/tmp/fluss
+
+  tablet-server:
+    image: apache/fluss:0.9.0-incubating-rc2
+    command: tabletServer
+    depends_on:
+      - coordinator-server
+    environment:
+      - |
+        FLUSS_PROPERTIES=
+        zookeeper.address: zookeeper:2181
+        bind.listeners: FLUSS://tablet-server:9123
+        data.dir: /tmp/fluss/data
+        remote.data.dir: /tmp/fluss/remote-data
+    volumes:
+      - fluss-data:/tmp/fluss
+
+  # ---- Flink Cluster ----
+  jobmanager:
+    image: flink:1.20-scala_2.12-java17
+    ports:
+      - "8083:8081"
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
+       /docker-entrypoint.sh jobmanager"
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    volumes:
+      - ./flink-lib:/tmp/jars
+
+  taskmanager:
+    image: flink:1.20-scala_2.12-java17
+    depends_on:
+      - jobmanager
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
+       /docker-entrypoint.sh taskmanager"
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 10
+        taskmanager.memory.process.size: 2048m
+    volumes:
+      - ./flink-lib:/tmp/jars
+
+  # ---- OpenClaw Gateway + fluss-hook plugin ----
+  # Build image first: ./scripts/build.sh
+  openclaw:
+    image: demo-openclaw
+    ports:
+      - "18789:18789"
+    depends_on:
+      - coordinator-server
+      - tablet-server
+    init: true
+    restart: unless-stopped
+    environment:
+      HOME: /home/node
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      BAILIAN_API_KEY: ${BAILIAN_API_KEY:-}
+    volumes:
+      - ./config/openclaw.json:/tmp/openclaw-config.json:ro
+      - ./scripts/auto-approve.sh:/tmp/auto-approve.sh:ro
+    command:
+      [
+        "sh", "-c",
+        "mkdir -p /home/node/.openclaw && cp /tmp/openclaw-config.json /home/node/.openclaw/openclaw.json && sh /tmp/auto-approve.sh & node dist/index.js gateway --allow-unconfigured --auth token --token demo-fluss-hook-2026 --bind lan"
+      ]
+
+volumes:
+  fluss-data:
+    driver: local
+    driver_opts:
+      type: "tmpfs"
+      device: "tmpfs"

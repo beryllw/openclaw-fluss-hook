@@ -1,0 +1,39 @@
+{
+  "id": "fluss-hook",
+  "name": "Fluss Message Logger",
+  "description": "Log all messages to Apache Fluss for real-time analytics",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "bootstrapServers": {
+        "type": "string",
+        "description": "Fluss cluster bootstrap servers (e.g. localhost:9223)"
+      },
+      "databaseName": {
+        "type": "string",
+        "description": "Fluss database name"
+      },
+      "tableName": {
+        "type": "string",
+        "description": "Fluss table name for message logs"
+      },
+      "batchSize": {
+        "type": "integer",
+        "description": "Max buffered messages before flush"
+      },
+      "flushIntervalMs": {
+        "type": "integer",
+        "description": "Flush interval in milliseconds"
+      },
+      "autoCreateTable": {
+        "type": "boolean",
+        "description": "Auto-create Fluss database and table if not exists"
+      },
+      "bucketCount": {
+        "type": "integer",
+        "description": "Number of buckets for table distribution"
+      }
+    }
+  }
+}

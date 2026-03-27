@@ -1,0 +1,36 @@
+# Compile fluss-node native addon for Linux.
+# Requires: fluss-node-base:latest (built by build-fluss-node.sh)
+# Output: /out/fluss-node-lib/
+
+FROM fluss-node-base:latest AS builder
+
+WORKDIR /build
+
+# Build context is the fluss-rust project root
+COPY . .
+
+WORKDIR /build/bindings/node
+RUN npm install
+
+# Patch napi config: remove "additional" targets to avoid "Duplicate targets" error
+RUN node -e "\
+  const p=JSON.parse(require('fs').readFileSync('package.json','utf8'));\
+  p.napi.triples={defaults:true};\
+  require('fs').writeFileSync('package.json',JSON.stringify(p,null,2));"
+
+# Build for current container arch
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then TARGET="x86_64-unknown-linux-gnu"; \
+    elif [ "$ARCH" = "aarch64" ]; then TARGET="aarch64-unknown-linux-gnu"; \
+    else echo "Unsupported arch: $ARCH" && exit 1; fi && \
+    napi build --platform --release --target "$TARGET"
+
+# Collect output artifacts
+RUN mkdir -p /out/fluss-node-lib \
+    && cp /build/bindings/node/fluss.*.node /out/fluss-node-lib/ \
+    && cp /build/bindings/node/index.js /out/fluss-node-lib/ \
+    && cp /build/bindings/node/index.d.ts /out/fluss-node-lib/ \
+    && cp /build/bindings/node/package.json /out/fluss-node-lib/
+
+FROM scratch
+COPY --from=builder /out/ /
