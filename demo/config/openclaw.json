@@ -58,7 +58,7 @@
         "config": {
           "bootstrapServers": "coordinator-server:9123",
           "databaseName": "openclaw",
-          "tableName": "message_logs",
+          "tablePrefix": "hook_",
           "autoCreateTable": true,
           "batchSize": 10,
           "flushIntervalMs": 3000

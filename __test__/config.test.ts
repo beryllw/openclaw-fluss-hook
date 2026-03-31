@@ -18,7 +18,7 @@ describe("resolveConfig", () => {
     expect(config).toEqual({
       bootstrapServers: "localhost:9223",
       databaseName: "openclaw",
-      tableName: "message_logs",
+      tablePrefix: "hook_",
       batchSize: 50,
       flushIntervalMs: 5000,
       autoCreateTable: true,
@@ -29,7 +29,7 @@ describe("resolveConfig", () => {
   it("uses env vars over defaults", () => {
     process.env.FLUSS_BOOTSTRAP_SERVERS = "fluss-host:9999";
     process.env.FLUSS_DATABASE = "mydb";
-    process.env.FLUSS_TABLE = "mytable";
+    process.env.FLUSS_TABLE_PREFIX = "evt_";
     process.env.FLUSS_BATCH_SIZE = "200";
     process.env.FLUSS_FLUSH_INTERVAL_MS = "10000";
     process.env.FLUSS_AUTO_CREATE_TABLE = "false";
@@ -39,7 +39,7 @@ describe("resolveConfig", () => {
 
     expect(config.bootstrapServers).toBe("fluss-host:9999");
     expect(config.databaseName).toBe("mydb");
-    expect(config.tableName).toBe("mytable");
+    expect(config.tablePrefix).toBe("evt_");
     expect(config.batchSize).toBe(200);
     expect(config.flushIntervalMs).toBe(10000);
     expect(config.autoCreateTable).toBe(false);
@@ -66,19 +66,19 @@ describe("resolveConfig", () => {
 
     const config = resolveConfig();
 
-    expect(config.batchSize).toBe(50); // default
-    expect(config.autoCreateTable).toBe(true); // default
-    expect(config.bootstrapServers).toBe("localhost:9223"); // default
+    expect(config.batchSize).toBe(50);
+    expect(config.autoCreateTable).toBe(true);
+    expect(config.bootstrapServers).toBe("localhost:9223");
   });
 
   it("ignores invalid pluginConfig types", () => {
     const config = resolveConfig({
-      bootstrapServers: 123, // wrong type
-      batchSize: "not-a-number", // wrong type
-      autoCreateTable: "yes", // wrong type
+      bootstrapServers: 123,
+      batchSize: "not-a-number",
+      autoCreateTable: "yes",
     });
 
-    expect(config.bootstrapServers).toBe("localhost:9223"); // falls through to default
+    expect(config.bootstrapServers).toBe("localhost:9223");
     expect(config.batchSize).toBe(50);
     expect(config.autoCreateTable).toBe(true);
   });
@@ -90,8 +90,8 @@ describe("resolveConfig", () => {
       bootstrapServers: "custom-host:9223",
     });
 
-    expect(config.bootstrapServers).toBe("custom-host:9223"); // from pluginConfig
-    expect(config.databaseName).toBe("env-db"); // from env
-    expect(config.tableName).toBe("message_logs"); // from default
+    expect(config.bootstrapServers).toBe("custom-host:9223");
+    expect(config.databaseName).toBe("env-db");
+    expect(config.tablePrefix).toBe("hook_");
   });
 });

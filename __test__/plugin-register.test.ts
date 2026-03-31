@@ -4,11 +4,7 @@ import type {
   OpenClawPluginApi,
   PluginLogger,
   PluginService,
-  PluginHookMessageReceivedEvent,
-  PluginHookMessageSentEvent,
-  PluginHookMessageContext,
-  PluginHookAgentEndEvent,
-  PluginHookAgentContext,
+  PluginHookName,
 } from "../src/types.js";
 
 // Mock fluss-node to avoid native binary dependency in tests
@@ -17,9 +13,52 @@ vi.mock("fluss-node", () => ({
   FlussConnection: { create: vi.fn() },
   DatabaseDescriptor: vi.fn(),
   TablePath: vi.fn(),
+  Schema: {
+    builder: () => {
+      const b: Record<string, Function> = {
+        column: () => b,
+        build: () => ({}),
+      };
+      return b;
+    },
+  },
+  DataTypes: {
+    string: () => "STRING",
+    boolean: () => "BOOLEAN",
+    bigint: () => "BIGINT",
+    int: () => "INT",
+  },
+  TableDescriptor: {
+    builder: () => {
+      const b: Record<string, Function> = {
+        schema: () => b,
+        distributedBy: () => b,
+        property: () => b,
+        build: () => ({}),
+      };
+      return b;
+    },
+  },
 }));
 
-describe("plugin register & event capture", () => {
+const ALL_HOOK_NAMES: PluginHookName[] = [
+  "before_agent_start",
+  "agent_end",
+  "before_compaction",
+  "after_compaction",
+  "message_received",
+  "message_sending",
+  "message_sent",
+  "before_tool_call",
+  "after_tool_call",
+  "tool_result_persist",
+  "session_start",
+  "session_end",
+  "gateway_start",
+  "gateway_stop",
+];
+
+describe("plugin register & hook registration", () => {
   let handlers: Record<string, Function>;
   let services: PluginService[];
   let logger: PluginLogger;
@@ -36,12 +75,10 @@ describe("plugin register & event capture", () => {
     };
 
     api = {
-      id: "fluss-hook",
-      name: "Fluss Message Logger",
       pluginConfig: {
         bootstrapServers: "localhost:9123",
         databaseName: "test_db",
-        tableName: "test_table",
+        tablePrefix: "hook_",
         autoCreateTable: true,
         batchSize: 10,
         flushIntervalMs: 3000,
@@ -56,15 +93,14 @@ describe("plugin register & event capture", () => {
     };
   });
 
-  it("registers message_received, message_sent, and agent_end hooks", () => {
+  it("registers all 14 hooks", () => {
     plugin.register(api);
 
-    expect(api.on).toHaveBeenCalledWith("message_received", expect.any(Function));
-    expect(api.on).toHaveBeenCalledWith("message_sent", expect.any(Function));
-    expect(api.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
-    expect(handlers).toHaveProperty("message_received");
-    expect(handlers).toHaveProperty("message_sent");
-    expect(handlers).toHaveProperty("agent_end");
+    expect(api.on).toHaveBeenCalledTimes(14);
+    for (const hookName of ALL_HOOK_NAMES) {
+      expect(api.on).toHaveBeenCalledWith(hookName, expect.any(Function));
+      expect(handlers).toHaveProperty(hookName);
+    }
   });
 
   it("registers a service with start/stop", () => {
@@ -77,61 +113,37 @@ describe("plugin register & event capture", () => {
     expect(typeof services[0].stop).toBe("function");
   });
 
-  it("message_received handler does not throw", () => {
+  it("all hook handlers do not throw", () => {
     plugin.register(api);
 
-    const event: PluginHookMessageReceivedEvent = {
-      from: "user-1",
-      content: "Hello from test",
-      timestamp: Date.now(),
-    };
-    const ctx: PluginHookMessageContext = {
-      channelId: "test-channel",
-      conversationId: "conv-1",
-      accountId: "acc-1",
-    };
+    // Agent hooks
+    expect(() => handlers.before_agent_start({ prompt: "test" }, {})).not.toThrow();
+    expect(() => handlers.agent_end({ messages: [], success: true }, {})).not.toThrow();
+    expect(() => handlers.before_compaction({ messageCount: 1 }, {})).not.toThrow();
+    expect(() => handlers.after_compaction({ messageCount: 1, compactedCount: 0 }, {})).not.toThrow();
 
-    // Should not throw — the handler pushes to buffer
-    expect(() => handlers.message_received(event, ctx)).not.toThrow();
-  });
+    // Message hooks
+    expect(() => handlers.message_received({ from: "u1", content: "hi" }, { channelId: "c1" })).not.toThrow();
+    expect(() => handlers.message_sending({ to: "u1", content: "hi" }, { channelId: "c1" })).not.toThrow();
+    expect(() => handlers.message_sent({ to: "u1", content: "hi", success: true }, { channelId: "c1" })).not.toThrow();
 
-  it("message_sent handler does not throw", () => {
-    plugin.register(api);
+    // Tool hooks
+    expect(() => handlers.before_tool_call({ toolName: "t", params: {} }, { toolName: "t" })).not.toThrow();
+    expect(() => handlers.after_tool_call({ toolName: "t", params: {} }, { toolName: "t" })).not.toThrow();
+    expect(() => handlers.tool_result_persist({ message: "m" }, {})).not.toThrow();
 
-    const event: PluginHookMessageSentEvent = {
-      to: "user-1",
-      content: "Response from AI",
-      success: true,
-    };
-    const ctx: PluginHookMessageContext = {
-      channelId: "test-channel",
-      conversationId: "conv-1",
-    };
+    // Session hooks
+    expect(() => handlers.session_start({ sessionId: "s1" }, { sessionId: "s1" })).not.toThrow();
+    expect(() => handlers.session_end({ sessionId: "s1", messageCount: 1 }, { sessionId: "s1" })).not.toThrow();
 
-    expect(() => handlers.message_sent(event, ctx)).not.toThrow();
-  });
-
-  it("agent_end handler does not throw", () => {
-    plugin.register(api);
-
-    const event: PluginHookAgentEndEvent = {
-      messages: [
-        { role: "assistant", content: [{ type: "text", text: "Hello" }], timestamp: 1000 },
-      ],
-      success: true,
-      durationMs: 200,
-    };
-    const ctx: PluginHookAgentContext = {
-      agentId: "main",
-      sessionKey: "main:test",
-    };
-
-    expect(() => handlers.agent_end(event, ctx)).not.toThrow();
+    // Gateway hooks
+    expect(() => handlers.gateway_start({ port: 3000 }, {})).not.toThrow();
+    expect(() => handlers.gateway_stop({}, {})).not.toThrow();
   });
 
   it("logs plugin registered message", () => {
     plugin.register(api);
 
-    expect(logger.info).toHaveBeenCalledWith("[fluss-hook] Plugin registered");
+    expect(logger.info).toHaveBeenCalledWith("[fluss-hook] Plugin registered (14 hooks)");
   });
 });

@@ -3,7 +3,7 @@ import type { FlussHookConfig } from "./types.js";
 const DEFAULTS: FlussHookConfig = {
   bootstrapServers: "localhost:9223",
   databaseName: "openclaw",
-  tableName: "message_logs",
+  tablePrefix: "hook_",
   batchSize: 50,
   flushIntervalMs: 5000,
   autoCreateTable: true,
@@ -49,10 +49,10 @@ export function resolveConfig(
       envString("FLUSS_DATABASE") ??
       DEFAULTS.databaseName,
 
-    tableName:
-      asString(cfg.tableName) ??
-      envString("FLUSS_TABLE") ??
-      DEFAULTS.tableName,
+    tablePrefix:
+      asString(cfg.tablePrefix) ??
+      envString("FLUSS_TABLE_PREFIX") ??
+      DEFAULTS.tablePrefix,
 
     batchSize:
       asInt(cfg.batchSize) ??

@@ -1,7 +1,7 @@
 {
   "id": "fluss-hook",
-  "name": "Fluss Message Logger",
-  "description": "Log all messages to Apache Fluss for real-time analytics",
+  "name": "Fluss Hook Event Logger",
+  "description": "Log all OpenClaw hook events to Apache Fluss for real-time analytics",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -14,13 +14,13 @@
         "type": "string",
         "description": "Fluss database name"
       },
-      "tableName": {
+      "tablePrefix": {
         "type": "string",
-        "description": "Fluss table name for message logs"
+        "description": "Table name prefix for hook event tables (e.g. hook_ creates hook_agent_end, hook_session_start, etc.)"
       },
       "batchSize": {
         "type": "integer",
-        "description": "Max buffered messages before flush"
+        "description": "Max buffered rows per table before flush"
       },
       "flushIntervalMs": {
         "type": "integer",
@@ -28,7 +28,7 @@
       },
       "autoCreateTable": {
         "type": "boolean",
-        "description": "Auto-create Fluss database and table if not exists"
+        "description": "Auto-create Fluss database and tables if not exists"
       },
       "bucketCount": {
         "type": "integer",
