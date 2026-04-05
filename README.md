@@ -295,16 +295,16 @@ Download the latest release package for your platform:
 ```bash
 tar xzf fluss-hook-v*.tar.gz
 cd fluss-hook
-./install.sh ~/.openclaw --bootstrap-servers your-fluss-server:9123
+./install.sh ~/.openclaw --gateway-url http://your-fluss-gateway:8080
 ```
 
-The install script copies the plugin and fluss-node binary into the OpenClaw plugins directory and prints the config snippet to add to `openclaw.json`.
+The install script copies the plugin into the OpenClaw plugins directory and prints the config snippet to add to `openclaw.json`.
 
 Options:
 
 ```bash
-./install.sh --force ~/.openclaw                           # overwrite existing
-./install.sh --bootstrap-servers 192.168.1.100:9123 ~/.openclaw  # specify Fluss address
+./install.sh --force ~/.openclaw                                        # overwrite existing
+./install.sh --gateway-url http://192.168.1.100:8080 ~/.openclaw        # specify Gateway address
 ```
 
 ### Install from Source (Alternative)
@@ -315,7 +315,7 @@ cd openclaw-fluss-hook
 ./scripts/install.sh ~/.openclaw       # Replace with your OpenClaw data directory
 ```
 
-This will auto-detect your platform, download the pre-compiled `fluss-node` native addon, and copy plugin files. See `./scripts/install.sh --help` for options.
+This will copy plugin files. See `./scripts/install.sh --help` for options.
 
 ### Configure the plugin
 
@@ -328,7 +328,7 @@ Add the plugin configuration to your `openclaw.json`:
       "fluss-hook": {
         "enabled": true,
         "config": {
-          "bootstrapServers": "localhost:9223"
+          "gatewayUrl": "http://localhost:8080"
         }
       }
     }
@@ -336,7 +336,7 @@ Add the plugin configuration to your `openclaw.json`:
 }
 ```
 
-Only `bootstrapServers` is required. All other options have sensible defaults (see [Configuration](#configuration) below).
+Only `gatewayUrl` is required. All other options have sensible defaults (see [Configuration](#configuration) below).
 
 ### Start OpenClaw
 
@@ -344,7 +344,7 @@ Start or restart the OpenClaw gateway. You should see in the logs:
 
 ```
 [fluss-hook] Plugin registered (14 hooks)
-[fluss-hook] Connected to Fluss at localhost:9123
+[fluss-hook] Connected to Fluss Gateway at http://localhost:8080
 ```
 
 ## Configuration
@@ -353,7 +353,9 @@ All options can be set via the plugin config in `openclaw.json`, environment var
 
 | Config Key | Env Variable | Default | Description |
 |------------|-------------|---------|-------------|
-| `bootstrapServers` | `FLUSS_BOOTSTRAP_SERVERS` | `localhost:9223` | Fluss coordinator address |
+| `gatewayUrl` | `FLUSS_GATEWAY_URL` | `http://localhost:8080` | Fluss Gateway REST API URL |
+| `gatewayUsername` | `FLUSS_GATEWAY_USERNAME` | _(empty)_ | Gateway basic auth username (optional) |
+| `gatewayPassword` | `FLUSS_GATEWAY_PASSWORD` | _(empty)_ | Gateway basic auth password (optional) |
 | `databaseName` | `FLUSS_DATABASE` | `openclaw` | Fluss database name |
 | `tablePrefix` | `FLUSS_TABLE_PREFIX` | `hook_` | Table name prefix (e.g. `hook_` creates `hook_agent_end`) |
 | `batchSize` | `FLUSS_BATCH_SIZE` | `50` | Rows buffered per table before flush |
@@ -415,34 +417,30 @@ See [demo/scripts/demo.sql](demo/scripts/demo.sql) for the full set of queries c
 | Scenario | Directories | Description |
 |----------|-------------|-------------|
 | **Demo** (full Docker stack) | [`demo/`](demo/) | ZooKeeper + Fluss + Flink + OpenClaw all-in-one Docker Compose |
-| **Plugin install** (existing OpenClaw) | [`deploy/`](deploy/) + `scripts/install.sh` | Deploy standalone Fluss cluster, install fluss-hook to existing OpenClaw |
-| **Docker OpenClaw** + Fluss cluster | [`deploy/`](deploy/) + [`deploy-openclaw/`](deploy-openclaw/) | Separate Fluss cluster and Docker-based OpenClaw |
+| **Plugin install** (existing OpenClaw) | [`deploy/`](deploy/) + `scripts/install.sh` | Deploy standalone Fluss cluster + Gateway, install fluss-hook to existing OpenClaw |
+| **Docker OpenClaw** + Fluss cluster | [`deploy/`](deploy/) + [`deploy-openclaw/`](deploy-openclaw/) | Separate Fluss cluster + Gateway and Docker-based OpenClaw |
 | **Local OpenClaw** (no Docker) | [`deploy/`](deploy/) + [`deploy-local/`](deploy-local/) | Non-Docker OpenClaw install with plugins on Linux server |
-
-### Pre-built fluss-node
-
-Pre-compiled native binaries are stored in `fluss-node-lib/` (darwin-arm64 and linux-x64-gnu). For Docker builds, extract the Linux binary first:
-
-```bash
-./scripts/prepare-fluss-node.sh    # extracts zip -> fluss-node-lib/linux-x64-gnu/
-```
-
-Or compile from source:
-
-```bash
-./scripts/build-fluss-node.sh --output-dir fluss-node-lib/linux-x64-gnu
-```
 
 ### Quick Start: Demo
 
 ```bash
-./scripts/prepare-fluss-node.sh   # one-time: extract fluss-node for Linux
 cd demo
 ./scripts/build.sh                # build the OpenClaw + plugin image
 docker compose up -d              # start all services
 ```
 
 See [demo/README.md](demo/README.md) for the full walkthrough.
+
+### Integration Testing
+
+```bash
+# Build the gateway image first (from fluss-gateway project)
+# Then run integration tests:
+npm run test:integration
+
+# Or skip integration tests:
+FLUSS_TEST_SKIP=true npm test
+```
 
 ## Development
 
@@ -468,29 +466,22 @@ npm run test:watch
 ├── src/
 │   ├── config.ts             # Configuration resolution (pluginConfig > env > defaults)
 │   ├── event-mappers.ts      # 14 event-to-row mapper functions
-│   ├── fluss-client.ts       # FlussClientManager — multi-writer with lazy initialization
+│   ├── fluss-client.ts       # GatewayClient — REST API client for Fluss Gateway
 │   ├── message-buffer.ts     # MultiTableBuffer — per-table batch + periodic flush
 │   ├── schema.ts             # 14 table schemas + registry
 │   └── types.ts              # Type definitions (14 hook event types, config)
-├── fluss-node-lib/           # Pre-compiled native binaries (zip files tracked by git)
-│   ├── bindings-darwin-arm64.zip
-│   ├── bindings-linux-x64-gnu.zip
-│   └── linux-x64-gnu/       # Extracted Linux binary (generated, gitignored)
-├── docker/
-│   ├── Dockerfile.fluss-node-base  # Shared base toolchain (Rust + Node.js + protoc)
-│   └── Dockerfile.fluss-node       # Compile phase (git clone + napi build)
 ├── scripts/
-│   ├── install.sh            # Plugin installer (requires repo clone)
-│   ├── release-install.sh    # Self-contained installer (bundled in release package)
-│   ├── package-release.sh    # Build release tar.gz packages
-│   ├── download-fluss-node.sh # Download pre-compiled fluss-node binary
-│   ├── build-fluss-node.sh   # Compile fluss-node from source in Docker
-│   └── prepare-fluss-node.sh # Extract pre-compiled zip for Docker builds
-├── __test__/                 # Vitest test suite (83 tests)
-├── demo/                     # Scenario 1: Full Docker Compose demo
-├── deploy/                   # Standalone Fluss + Flink cluster
-├── deploy-openclaw/          # Scenario 3: Docker OpenClaw deployment
-├── deploy-local/             # Scenario 2b: Non-Docker local OpenClaw deployment
+│   ├── install.sh            # Plugin installer
+│   └── release-install.sh    # Self-contained installer (bundled in release package)
+├── __test__/                 # Vitest test suite
+│   ├── integration.test.ts   # Docker-based integration tests (Gateway + Fluss cluster)
+│   ├── plugin-e2e.test.ts    # End-to-end plugin tests with fetch mock
+│   └── ...
+├── demo/                     # Full Docker Compose demo
+├── deploy/                   # Standalone Fluss + Flink + Gateway cluster
+├── deploy-openclaw/          # Docker OpenClaw deployment
+├── deploy-local/             # Non-Docker local OpenClaw deployment
+├── docker-compose.integration.yml  # Integration test infrastructure
 ├── openclaw.plugin.json      # Plugin manifest with config schema
 ├── package.json
 └── tsconfig.json

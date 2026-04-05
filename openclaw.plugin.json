@@ -6,17 +6,17 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "bootstrapServers": {
+      "gatewayUrl": {
         "type": "string",
-        "description": "Fluss cluster bootstrap servers (e.g. localhost:9223)"
+        "description": "Fluss Gateway REST API URL (e.g. http://localhost:8080)"
       },
-      "username": {
+      "gatewayUsername": {
         "type": "string",
-        "description": "Fluss SASL username (optional, enables SASL auth when set with password)"
+        "description": "Fluss Gateway basic auth username (optional)"
       },
-      "password": {
+      "gatewayPassword": {
         "type": "string",
-        "description": "Fluss SASL password (optional, enables SASL auth when set with username)"
+        "description": "Fluss Gateway basic auth password (optional)"
       },
       "databaseName": {
         "type": "string",
