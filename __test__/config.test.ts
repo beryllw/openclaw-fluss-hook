@@ -16,9 +16,9 @@ describe("resolveConfig", () => {
     const config = resolveConfig();
 
     expect(config).toEqual({
-      bootstrapServers: "localhost:9223",
-      username: undefined,
-      password: undefined,
+      gatewayUrl: "http://localhost:8080",
+      gatewayUsername: undefined,
+      gatewayPassword: undefined,
       databaseName: "openclaw",
       tablePrefix: "hook_",
       batchSize: 50,
@@ -29,7 +29,7 @@ describe("resolveConfig", () => {
   });
 
   it("uses env vars over defaults", () => {
-    process.env.FLUSS_BOOTSTRAP_SERVERS = "fluss-host:9999";
+    process.env.FLUSS_GATEWAY_URL = "http://fluss-host:8080";
     process.env.FLUSS_DATABASE = "mydb";
     process.env.FLUSS_TABLE_PREFIX = "evt_";
     process.env.FLUSS_BATCH_SIZE = "200";
@@ -39,7 +39,7 @@ describe("resolveConfig", () => {
 
     const config = resolveConfig();
 
-    expect(config.bootstrapServers).toBe("fluss-host:9999");
+    expect(config.gatewayUrl).toBe("http://fluss-host:8080");
     expect(config.databaseName).toBe("mydb");
     expect(config.tablePrefix).toBe("evt_");
     expect(config.batchSize).toBe(200);
@@ -49,38 +49,38 @@ describe("resolveConfig", () => {
   });
 
   it("uses pluginConfig over env vars", () => {
-    process.env.FLUSS_BOOTSTRAP_SERVERS = "env-host:1111";
+    process.env.FLUSS_GATEWAY_URL = "http://env-host:8080";
     process.env.FLUSS_DATABASE = "env-db";
 
     const config = resolveConfig({
-      bootstrapServers: "plugin-host:2222",
+      gatewayUrl: "http://plugin-host:8080",
       databaseName: "plugin-db",
     });
 
-    expect(config.bootstrapServers).toBe("plugin-host:2222");
+    expect(config.gatewayUrl).toBe("http://plugin-host:8080");
     expect(config.databaseName).toBe("plugin-db");
   });
 
   it("ignores invalid env var values", () => {
     process.env.FLUSS_BATCH_SIZE = "not-a-number";
     process.env.FLUSS_AUTO_CREATE_TABLE = "maybe";
-    process.env.FLUSS_BOOTSTRAP_SERVERS = "   ";
+    process.env.FLUSS_GATEWAY_URL = "   ";
 
     const config = resolveConfig();
 
     expect(config.batchSize).toBe(50);
     expect(config.autoCreateTable).toBe(true);
-    expect(config.bootstrapServers).toBe("localhost:9223");
+    expect(config.gatewayUrl).toBe("http://localhost:8080");
   });
 
   it("ignores invalid pluginConfig types", () => {
     const config = resolveConfig({
-      bootstrapServers: 123,
+      gatewayUrl: 123,
       batchSize: "not-a-number",
       autoCreateTable: "yes",
     });
 
-    expect(config.bootstrapServers).toBe("localhost:9223");
+    expect(config.gatewayUrl).toBe("http://localhost:8080");
     expect(config.batchSize).toBe(50);
     expect(config.autoCreateTable).toBe(true);
   });
@@ -89,45 +89,45 @@ describe("resolveConfig", () => {
     process.env.FLUSS_DATABASE = "env-db";
 
     const config = resolveConfig({
-      bootstrapServers: "custom-host:9223",
+      gatewayUrl: "http://custom-host:8080",
     });
 
-    expect(config.bootstrapServers).toBe("custom-host:9223");
+    expect(config.gatewayUrl).toBe("http://custom-host:8080");
     expect(config.databaseName).toBe("env-db");
     expect(config.tablePrefix).toBe("hook_");
   });
 
-  it("uses username/password from pluginConfig", () => {
+  it("uses gatewayUsername/gatewayPassword from pluginConfig", () => {
     const config = resolveConfig({
-      bootstrapServers: "sasl-host:9223",
-      username: "admin",
-      password: "secret",
+      gatewayUrl: "http://sasl-host:8080",
+      gatewayUsername: "admin",
+      gatewayPassword: "secret",
     });
 
-    expect(config.username).toBe("admin");
-    expect(config.password).toBe("secret");
+    expect(config.gatewayUsername).toBe("admin");
+    expect(config.gatewayPassword).toBe("secret");
   });
 
-  it("uses username/password from pluginConfig over env vars", () => {
-    process.env.FLUSS_USERNAME = "env-user";
-    process.env.FLUSS_PASSWORD = "env-pass";
+  it("uses gatewayUsername/gatewayPassword from pluginConfig over env vars", () => {
+    process.env.FLUSS_GATEWAY_USERNAME = "env-user";
+    process.env.FLUSS_GATEWAY_PASSWORD = "env-pass";
 
     const config = resolveConfig({
-      username: "plugin-user",
-      password: "plugin-pass",
+      gatewayUsername: "plugin-user",
+      gatewayPassword: "plugin-pass",
     });
 
-    expect(config.username).toBe("plugin-user");
-    expect(config.password).toBe("plugin-pass");
+    expect(config.gatewayUsername).toBe("plugin-user");
+    expect(config.gatewayPassword).toBe("plugin-pass");
   });
 
-  it("ignores invalid username/password types", () => {
+  it("ignores invalid gatewayUsername/gatewayPassword types", () => {
     const config = resolveConfig({
-      username: 123,
-      password: null,
+      gatewayUsername: 123,
+      gatewayPassword: null,
     });
 
-    expect(config.username).toBeUndefined();
-    expect(config.password).toBeUndefined();
+    expect(config.gatewayUsername).toBeUndefined();
+    expect(config.gatewayPassword).toBeUndefined();
   });
 });

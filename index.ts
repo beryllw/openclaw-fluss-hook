@@ -1,6 +1,6 @@
 import type { OpenClawPluginApi } from "./src/types.js";
 import { resolveConfig } from "./src/config.js";
-import { FlussClientManager } from "./src/fluss-client.js";
+import { GatewayClient } from "./src/fluss-client.js";
 import { MultiTableBuffer } from "./src/message-buffer.js";
 import {
   mapBeforeAgentStart,
@@ -26,8 +26,8 @@ const plugin = {
 
   register(api: OpenClawPluginApi) {
     const config = resolveConfig(api.pluginConfig);
-    const flussClient = new FlussClientManager(config, api.logger);
-    const buffer = new MultiTableBuffer(flussClient, config, api.logger);
+    const gatewayClient = new GatewayClient(config, api.logger);
+    const buffer = new MultiTableBuffer(gatewayClient, config, api.logger);
 
     // -- Agent Hooks --
     api.on("before_agent_start", (event, ctx) => {
@@ -92,7 +92,8 @@ const plugin = {
 
     api.registerService({
       id: "fluss-hook",
-      start: () => {
+      start: async () => {
+        await gatewayClient.ensureDatabase();
         buffer.start();
       },
       stop: async () => {

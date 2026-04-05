@@ -1,7 +1,7 @@
 import type { FlussHookConfig } from "./types.js";
 
 const DEFAULTS: FlussHookConfig = {
-  bootstrapServers: "localhost:9223",
+  gatewayUrl: "http://localhost:8080",
   databaseName: "openclaw",
   tablePrefix: "hook_",
   batchSize: 50,
@@ -39,19 +39,19 @@ export function resolveConfig(
   const cfg = pluginConfig ?? {};
 
   return {
-    bootstrapServers:
-      asString(cfg.bootstrapServers) ??
-      envString("FLUSS_BOOTSTRAP_SERVERS") ??
-      DEFAULTS.bootstrapServers,
+    gatewayUrl:
+      asString(cfg.gatewayUrl) ??
+      envString("FLUSS_GATEWAY_URL") ??
+      DEFAULTS.gatewayUrl,
 
-    username:
-      asString(cfg.username) ??
-      envString("FLUSS_USERNAME") ??
+    gatewayUsername:
+      asString(cfg.gatewayUsername) ??
+      envString("FLUSS_GATEWAY_USERNAME") ??
       undefined,
 
-    password:
-      asString(cfg.password) ??
-      envString("FLUSS_PASSWORD") ??
+    gatewayPassword:
+      asString(cfg.gatewayPassword) ??
+      envString("FLUSS_GATEWAY_PASSWORD") ??
       undefined,
 
     databaseName:

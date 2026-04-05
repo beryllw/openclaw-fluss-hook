@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MultiTableBuffer } from "../src/message-buffer.js";
-import type { FlussClientManager } from "../src/fluss-client.js";
+import type { GatewayClient } from "../src/fluss-client.js";
 import type { FlussHookConfig, PluginLogger } from "../src/types.js";
 
 function createMockLogger(): PluginLogger {
@@ -12,18 +12,17 @@ function createMockLogger(): PluginLogger {
   };
 }
 
-function createMockFlussClient(overrides?: Partial<FlussClientManager>) {
+function createMockGatewayClient(overrides?: Partial<GatewayClient>) {
   return {
     appendBatch: vi.fn().mockResolvedValue(undefined),
     close: vi.fn(),
-    ensureConnected: vi.fn().mockResolvedValue(true),
     ...overrides,
-  } as unknown as FlussClientManager;
+  } as unknown as GatewayClient;
 }
 
 function createConfig(overrides?: Partial<FlussHookConfig>): FlussHookConfig {
   return {
-    bootstrapServers: "localhost:9223",
+    gatewayUrl: "http://localhost:8080",
     databaseName: "test_db",
     tablePrefix: "hook_",
     batchSize: 3,
@@ -39,11 +38,11 @@ function createRow(id: number): Record<string, unknown> {
 }
 
 describe("MultiTableBuffer", () => {
-  let client: ReturnType<typeof createMockFlussClient>;
+  let client: ReturnType<typeof createMockGatewayClient>;
   let logger: PluginLogger;
 
   beforeEach(() => {
-    client = createMockFlussClient();
+    client = createMockGatewayClient();
     logger = createMockLogger();
   });
 
@@ -117,7 +116,7 @@ describe("MultiTableBuffer", () => {
   });
 
   it("logs error on flush failure without throwing", async () => {
-    const failClient = createMockFlussClient({
+    const failClient = createMockGatewayClient({
       appendBatch: vi.fn().mockRejectedValue(new Error("connection lost")),
     });
     const buffer = new MultiTableBuffer(failClient, createConfig({ batchSize: 100 }), logger);

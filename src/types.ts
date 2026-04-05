@@ -250,9 +250,9 @@ export type OpenClawPluginApi = {
 // =============================================================================
 
 export type FlussHookConfig = {
-  bootstrapServers: string;
-  username?: string;
-  password?: string;
+  gatewayUrl: string;
+  gatewayUsername?: string;
+  gatewayPassword?: string;
   databaseName: string;
   tablePrefix: string;
   batchSize: number;

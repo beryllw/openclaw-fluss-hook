@@ -1,5 +1,5 @@
 import type { FlussHookConfig, PluginHookName, PluginLogger } from "./types.js";
-import type { FlussClientManager } from "./fluss-client.js";
+import type { GatewayClient } from "./fluss-client.js";
 
 const MAX_BUFFER_SIZE_PER_TABLE = 10000;
 
@@ -14,16 +14,16 @@ export class MultiTableBuffer {
   private buffers: Map<PluginHookName, Record<string, unknown>[]> = new Map();
   private flushing: Set<PluginHookName> = new Set();
   private timer: ReturnType<typeof setInterval> | null = null;
-  private flussClient: FlussClientManager;
+  private gatewayClient: GatewayClient;
   private config: FlussHookConfig;
   private logger: PluginLogger;
 
   constructor(
-    flussClient: FlussClientManager,
+    gatewayClient: GatewayClient,
     config: FlussHookConfig,
     logger: PluginLogger,
   ) {
-    this.flussClient = flussClient;
+    this.gatewayClient = gatewayClient;
     this.config = config;
     this.logger = logger;
   }
@@ -78,7 +78,7 @@ export class MultiTableBuffer {
     }
 
     await this.flushAll();
-    this.flussClient.close();
+    this.gatewayClient.close();
     this.logger.info("[fluss-hook] Buffer stopped");
   }
 
@@ -103,7 +103,7 @@ export class MultiTableBuffer {
     const batch = buffer.splice(0);
 
     try {
-      await this.flussClient.appendBatch(hookName, batch);
+      await this.gatewayClient.appendBatch(hookName, batch);
       this.logger.debug?.(
         `[fluss-hook] Flushed ${batch.length} rows to ${hookName}`,
       );

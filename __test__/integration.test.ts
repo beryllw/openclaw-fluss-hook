@@ -1,15 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execSync } from "child_process";
-import {
-  Config,
-  FlussConnection,
-  DatabaseDescriptor,
-} from "fluss-node";
 
 const COMPOSE_FILE = "docker-compose.integration.yml";
+const GATEWAY_URL = "http://localhost:8080";
 const TIMEOUT_MS = 120_000;
 
-// Detect available compose command (podman compose works with OrbStack, docker compose may fail in Node child_process)
+// Detect available compose command
 function detectComposeCommand(): string | null {
   try {
     execSync("podman compose version", { stdio: "ignore", timeout: 5000 });
@@ -27,100 +23,109 @@ function detectComposeCommand(): string | null {
 const COMPOSE_CMD = detectComposeCommand();
 const SKIP = process.env.FLUSS_TEST_SKIP === "true" || !COMPOSE_CMD;
 
-describe.skipIf(SKIP)("Fluss Integration Tests", () => {
+async function httpGet(path: string): Promise<unknown> {
+  const res = await fetch(`${GATEWAY_URL}${path}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function httpPost(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(`${GATEWAY_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+describe.skipIf(SKIP)("Fluss Gateway Integration Tests", () => {
   beforeAll(async () => {
-    console.log(`[setup] Starting Fluss cluster via ${COMPOSE_CMD}...`);
+    console.log(`[setup] Starting Fluss cluster + gateway via ${COMPOSE_CMD}...`);
     execSync(`${COMPOSE_CMD} -f ${COMPOSE_FILE} up -d --force-recreate --renew-anon-volumes`, {
       stdio: "inherit",
     });
-
-    // Wait for Fluss to be ready
-    console.log("[setup] Waiting for Fluss to be ready...");
-    await waitForFluss();
+    await waitForGateway();
   }, TIMEOUT_MS);
 
   afterAll(() => {
-    console.log("[cleanup] Stopping Fluss cluster...");
+    console.log("[cleanup] Stopping Fluss cluster + gateway...");
     execSync(`${COMPOSE_CMD} -f ${COMPOSE_FILE} down -v`, { stdio: "inherit" });
   });
 
-  describe("plaintext connection", () => {
-    it("should connect, create db/table, and write data", async () => {
-      const config = new Config({
-        "bootstrap.servers": "localhost:9223",
-        "writer.acks": "all",
-      });
-
-      const connection = await FlussConnection.create(config);
-      const admin = connection.getAdmin();
-
-      // Create database
-      const dbName = "integration_test";
-      const descriptor = new DatabaseDescriptor("integration test database");
-      await admin.createDatabase(dbName, descriptor, true);
-      expect(await admin.databaseExists(dbName)).toBe(true);
-
-      // Create table
-      // Note: Table creation requires proper schema and descriptor
-      // For now, just verify we can connect and create databases
-      console.log("[test] Database created successfully");
-
-      await connection.close();
-    }, 30_000);
+  describe("health check", () => {
+    it("should return healthy", async () => {
+      const result = await httpGet("/health");
+      expect(result).toEqual({ status: "ok" });
+    }, 10_000);
   });
 
-  describe("SASL connection", () => {
-    it("should connect with correct credentials", async () => {
-      const config = new Config({
-        "bootstrap.servers": "localhost:9123",
-        "writer.acks": "all",
-        "security.protocol": "sasl",
-        "security.sasl.mechanism": "PLAIN",
-        "security.sasl.username": "admin",
-        "security.sasl.password": "admin-secret",
+  describe("database operations", () => {
+    it("should create a database", async () => {
+      await httpPost("/v1/_databases", {
+        database_name: "integration_test",
+        comment: "integration test database",
+        ignore_if_exists: true,
       });
 
-      const connection = await FlussConnection.create(config);
-      const admin = connection.getAdmin();
+      const dbs = await httpGet("/v1/_databases");
+      expect((dbs as string[]).includes("integration_test")).toBe(true);
+    }, 10_000);
+  });
 
-      expect(await admin.databaseExists("integration_test")).toBe(true);
-      console.log("[test] SASL connection with correct credentials successful");
-
-      await connection.close();
-    }, 30_000);
-
-    it("should reject wrong credentials", async () => {
-      const config = new Config({
-        "bootstrap.servers": "localhost:9123",
-        "writer.acks": "all",
-        "security.protocol": "sasl",
-        "security.sasl.mechanism": "PLAIN",
-        "security.sasl.username": "admin",
-        "security.sasl.password": "wrong-password",
+  describe("table and write operations", () => {
+    it("should create a table and write data", async () => {
+      // Create a log table (no PK)
+      await httpPost("/v1/integration_test/_tables", {
+        table_name: "test_log",
+        schema: [
+          { name: "message", data_type: "string" },
+          { name: "ts", data_type: "bigint" },
+        ],
+        bucket_count: 2,
+        bucket_keys: ["message"],
+        ignore_if_exists: true,
       });
 
-      await expect(FlussConnection.create(config)).rejects.toThrow();
-    }, 30_000);
+      // Wait for Fluss metadata to propagate across cluster
+      await new Promise((r) => setTimeout(r, 5000));
+
+      // Verify table is visible before writing
+      const tables = await httpGet("/v1/integration_test/_tables");
+      expect((tables as string[]).includes("test_log")).toBe(true);
+
+      // Write rows
+      const result = await httpPost("/v1/integration_test/test_log/rows", {
+        rows: [
+          { values: ["hello world", Date.now()] },
+          { values: ["second message", Date.now()] },
+        ],
+      });
+
+      expect((result as { row_count: number }).row_count).toBe(2);
+    }, 15_000);
+
+    it("should list tables", async () => {
+      const tables = await httpGet("/v1/integration_test/_tables");
+      expect((tables as string[]).includes("test_log")).toBe(true);
+    }, 10_000);
   });
 });
 
-async function waitForFluss(): Promise<void> {
-  const maxRetries = 60;
-  const retryInterval = 1000;
-
+async function waitForGateway(): Promise<void> {
+  const maxRetries = 120;
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const config = new Config({
-        "bootstrap.servers": "localhost:9223",
-      });
-      const connection = await FlussConnection.create(config);
-      await connection.close();
-      console.log("[setup] Fluss is ready!");
-      return;
+      const res = await fetch(`${GATEWAY_URL}/health`);
+      if (res.ok) {
+        console.log("[setup] Gateway is ready!");
+        return;
+      }
     } catch {
-      await new Promise((r) => setTimeout(r, retryInterval));
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
-
-  throw new Error("Fluss cluster did not become ready within timeout");
+  throw new Error("Gateway did not become ready within timeout");
 }

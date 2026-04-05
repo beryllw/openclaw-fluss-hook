@@ -1,195 +1,246 @@
-import {
-  Config,
-  FlussConnection,
-  DatabaseDescriptor,
-} from "fluss-node";
 import type { FlussHookConfig, PluginHookName, PluginLogger } from "./types.js";
-import { buildTablePath, buildTableDescriptor, buildFullTableName } from "./schema.js";
+import { buildFullTableName, buildCreateTableBody, getColumnNames } from "./schema.js";
 
-type AppendWriter = ReturnType<
-  ReturnType<Awaited<ReturnType<FlussConnection["getTable"]>>["newAppend"]>["createWriter"]
->;
+const REQUEST_TIMEOUT_MS = 10_000;
+
+// =============================================================================
+// Gateway REST API types
+// =============================================================================
+
+interface GatewayErrorResponse {
+  error_code: number;
+  message: string;
+}
+
+interface CreateDatabaseBody {
+  database_name: string;
+  comment: string;
+  ignore_if_exists: boolean;
+}
+
+interface AppendRow {
+  values: unknown[];
+}
+
+interface AppendBody {
+  rows: AppendRow[];
+}
+
+interface AppendResponse {
+  row_count: number;
+}
+
+// =============================================================================
+// Gateway Client
+// =============================================================================
 
 /**
- * Manages the Fluss connection lifecycle with lazy initialization,
- * auto table creation, and per-table writer caching.
+ * HTTP client for the fluss-gateway REST API.
+ * Replaces the FlussClientManager that used the fluss-node NAPI binary.
  */
-export class FlussClientManager {
+export class GatewayClient {
   private config: FlussHookConfig;
   private logger: PluginLogger;
-  private connection: FlussConnection | null = null;
-  private writers: Map<string, AppendWriter> = new Map();
-  private connecting: Promise<void> | null = null;
-  private connected = false;
-  private writerInitializing: Map<string, Promise<void>> = new Map();
+  private baseUrl: string;
+  private authHeader: string | undefined;
+  private tablesCreated: Set<PluginHookName> = new Set();
+  private tableInitializing: Map<PluginHookName, Promise<boolean>> = new Map();
 
   constructor(config: FlussHookConfig, logger: PluginLogger) {
     this.config = config;
     this.logger = logger;
+    this.baseUrl = config.gatewayUrl.replace(/\/+$/, "");
+
+    if (config.gatewayUsername && config.gatewayPassword) {
+      const encoded = Buffer.from(
+        `${config.gatewayUsername}:${config.gatewayPassword}`,
+      ).toString("base64");
+      this.authHeader = `Basic ${encoded}`;
+    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
 
   /**
-   * Ensure the connection is established.
-   */
-  async ensureConnected(): Promise<boolean> {
-    if (this.connected && this.connection) {
-      return true;
-    }
-
-    if (this.connecting) {
-      await this.connecting;
-      return this.connected;
-    }
-
-    this.connecting = this.connect();
-    try {
-      await this.connecting;
-    } finally {
-      this.connecting = null;
-    }
-    return this.connected;
-  }
-
-  private async connect(): Promise<void> {
-    try {
-      const configOpts: Record<string, string> = {
-        "bootstrap.servers": this.config.bootstrapServers,
-      };
-      if (this.config.username && this.config.password) {
-        configOpts["security.protocol"] = "sasl";
-        configOpts["security.sasl.mechanism"] = "PLAIN";
-        configOpts["security.sasl.username"] = this.config.username;
-        configOpts["security.sasl.password"] = this.config.password;
-      }
-      const flussConfig = new Config(configOpts);
-      this.connection = await FlussConnection.create(flussConfig);
-      this.connected = true;
-      this.logger.info(
-        `[fluss-hook] Connected to Fluss at ${this.config.bootstrapServers}`,
-      );
-
-      // Auto-create database if needed
-      if (this.config.autoCreateTable) {
-        const admin = this.connection.getAdmin();
-        const dbExists = await admin.databaseExists(this.config.databaseName);
-        if (!dbExists) {
-          await admin.createDatabase(
-            this.config.databaseName,
-            new DatabaseDescriptor("OpenClaw hook event logs"),
-            true,
-          );
-          this.logger.info(
-            `[fluss-hook] Created database: ${this.config.databaseName}`,
-          );
-        }
-      }
-    } catch (err) {
-      this.logger.error(
-        `[fluss-hook] Connection failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      this.connected = false;
-      this.cleanup();
-    }
-  }
-
-  /**
-   * Get or create a writer for the specified hook table.
-   * Writers are lazily initialized on first use.
-   */
-  private async ensureWriter(hookName: PluginHookName): Promise<AppendWriter | null> {
-    const tableName = buildFullTableName(this.config, hookName);
-
-    const existing = this.writers.get(tableName);
-    if (existing) return existing;
-
-    // Check if another call is already initializing this writer
-    const pending = this.writerInitializing.get(tableName);
-    if (pending) {
-      await pending;
-      return this.writers.get(tableName) ?? null;
-    }
-
-    const init = this.initWriter(hookName, tableName);
-    this.writerInitializing.set(tableName, init);
-    try {
-      await init;
-    } finally {
-      this.writerInitializing.delete(tableName);
-    }
-    return this.writers.get(tableName) ?? null;
-  }
-
-  private async initWriter(hookName: PluginHookName, tableName: string): Promise<void> {
-    if (!this.connection) return;
-
-    try {
-      const tablePath = buildTablePath(this.config, hookName);
-
-      if (this.config.autoCreateTable) {
-        const admin = this.connection.getAdmin();
-        const tableExists = await admin.tableExists(tablePath);
-        if (!tableExists) {
-          const descriptor = buildTableDescriptor(this.config, hookName);
-          await admin.createTable(tablePath, descriptor, true);
-          this.logger.info(
-            `[fluss-hook] Created table: ${this.config.databaseName}.${tableName}`,
-          );
-        }
-      }
-
-      const table = await this.connection.getTable(tablePath);
-      const writer = table.newAppend().createWriter();
-      this.writers.set(tableName, writer);
-      this.logger.debug?.(
-        `[fluss-hook] Writer ready for table: ${tableName}`,
-      );
-    } catch (err) {
-      this.logger.error(
-        `[fluss-hook] Writer init failed for ${tableName}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /**
-   * Append a batch of rows to a specific hook table and flush.
+   * Append a batch of rows to a specific hook table via POST /v1/{db}/{table}/rows.
    */
   async appendBatch(
     hookName: PluginHookName,
     rows: Record<string, unknown>[],
   ): Promise<void> {
-    const isConnected = await this.ensureConnected();
-    if (!isConnected) {
-      throw new Error("Fluss client not connected");
+    // Auto-create table if configured (done on first append per table)
+    if (this.config.autoCreateTable) {
+      await this.ensureTableExists(hookName);
     }
 
-    const writer = await this.ensureWriter(hookName);
-    if (!writer) {
-      throw new Error(`Writer not available for ${hookName}`);
-    }
+    const tableName = buildFullTableName(this.config, hookName);
+    const columnNames = getColumnNames(hookName);
 
-    for (const row of rows) {
-      writer.append(row);
+    // Convert row objects to ordered values arrays
+    const gatewayRows: AppendRow[] = rows.map((row) => ({
+      values: columnNames.map((col) => row[col] ?? null),
+    }));
+
+    const body: AppendBody = { rows: gatewayRows };
+
+    try {
+      const response = await this.fetchJson<AppendResponse>(
+        `/v1/${encodeURIComponent(this.config.databaseName)}/${encodeURIComponent(tableName)}/rows`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
+
+      this.logger.debug?.(
+        `[fluss-hook] Appended ${response?.row_count ?? rows.length} rows to ${tableName}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[fluss-hook] Append failed for ${hookName} (${rows.length} rows dropped): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      throw err;
     }
-    await writer.flush();
   }
 
   /**
-   * Close the connection and all writers.
+   * Close resources (no-op for HTTP client, kept for API compatibility).
    */
   close(): void {
-    this.cleanup();
-    this.logger.info("[fluss-hook] Connection closed");
+    this.logger.info("[fluss-hook] GatewayClient closed");
   }
 
-  private cleanup(): void {
-    this.writers.clear();
-    this.writerInitializing.clear();
-    this.connected = false;
+  // ---------------------------------------------------------------------------
+  // Admin operations (database/table creation)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create the database if autoCreateTable is enabled.
+   */
+  async ensureDatabase(): Promise<void> {
+    if (!this.config.autoCreateTable) return;
+
     try {
-      this.connection?.close();
-    } catch {
-      // ignore close errors
+      await this.fetchJson(
+        "/v1/_databases",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            database_name: this.config.databaseName,
+            comment: "OpenClaw hook event logs",
+            ignore_if_exists: true,
+          } satisfies CreateDatabaseBody),
+        },
+      );
+      this.logger.debug?.(
+        `[fluss-hook] Database ready: ${this.config.databaseName}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[fluss-hook] Database setup failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
     }
-    this.connection = null;
+  }
+
+  /**
+   * Ensure a table exists, creating it if needed (lazy, per-hook).
+   */
+  private async ensureTableExists(hookName: PluginHookName): Promise<boolean> {
+    if (this.tablesCreated.has(hookName)) return true;
+
+    const existing = this.tableInitializing.get(hookName);
+    if (existing) return existing;
+
+    const init = this.initTable(hookName);
+    this.tableInitializing.set(hookName, init);
+    try {
+      const result = await init;
+      if (result) {
+        this.tablesCreated.add(hookName);
+      }
+      return result;
+    } finally {
+      this.tableInitializing.delete(hookName);
+    }
+  }
+
+  private async initTable(hookName: PluginHookName): Promise<boolean> {
+    const tableName = buildFullTableName(this.config, hookName);
+
+    try {
+      const body = buildCreateTableBody(this.config, hookName);
+      // Use ignore_if_exists to avoid race conditions with concurrent plugin instances
+      await this.fetchJson(
+        `/v1/${encodeURIComponent(this.config.databaseName)}/_tables`,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...body, ignore_if_exists: true }),
+        },
+      );
+      this.logger.debug?.(
+        `[fluss-hook] Table ready: ${this.config.databaseName}.${tableName}`,
+      );
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `[fluss-hook] Table init failed for ${tableName}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // HTTP helpers
+  // ---------------------------------------------------------------------------
+
+  private async fetchJson<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<T | null> {
+    const url = `${this.baseUrl}${path}`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> | undefined),
+    };
+    if (this.authHeader) {
+      headers["Authorization"] = this.authHeader;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        headers,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errorBody = (await response.json()) as GatewayErrorResponse;
+          errorDetail = `${errorBody.message} (code: ${errorBody.error_code})`;
+        } catch {
+          // ignore JSON parse error
+        }
+        throw new Error(`Gateway error: ${errorDetail}`);
+      }
+
+      // 201 Created or 204 No Content may have no body
+      if (response.status === 204) return null;
+
+      const text = await response.text();
+      if (!text) return null;
+
+      return JSON.parse(text) as T;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

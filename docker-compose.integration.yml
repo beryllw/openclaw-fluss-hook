@@ -6,51 +6,71 @@ services:
     tmpfs:
       - /data
       - /datalog
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
-  # ---- Fluss Coordinator (dual listeners: SASL on 9123, plaintext on 9223) ----
+  # ---- Fluss Coordinator ----
   coordinator-server:
     image: apache/fluss:0.9.0-incubating
     command: coordinatorServer
+    restart: "no"
     depends_on:
-      - zookeeper
-    ports:
-      - "9123:9123"
-      - "9223:9223"
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9123"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
     environment:
       FLUSS_PROPERTIES: |
         zookeeper.address: zookeeper:2181
-        bind.listeners: INTERNAL://coordinator-server:0, CLIENT://coordinator-server:9123, PLAIN_CLIENT://coordinator-server:9223
-        advertised.listeners: CLIENT://localhost:9123, PLAIN_CLIENT://localhost:9223
-        internal.listener.name: INTERNAL
-        security.protocol.map: CLIENT:sasl
-        security.sasl.enabled.mechanisms: plain
-        security.sasl.plain.jaas.config: org.apache.fluss.security.auth.sasl.plain.PlainLoginModule required user_admin="admin-secret" user_alice="alice-secret";
-    volumes:
-      - fluss-data:/tmp/fluss
+        bind.listeners: FLUSS://coordinator-server:0,CLIENT://coordinator-server:9123
+        advertised.listeners: FLUSS://coordinator-server:9333,CLIENT://coordinator-server:9123
+    ports:
+      - "9123:9123"
 
-  # ---- Fluss Tablet Server (dual listeners matching coordinator) ----
+  # ---- Fluss Tablet Server ----
   tablet-server:
     image: apache/fluss:0.9.0-incubating
     command: tabletServer
+    restart: "no"
     depends_on:
-      - coordinator-server
-    ports:
-      - "9124:9123"
-      - "9224:9223"
+      coordinator-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9123"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
     environment:
       FLUSS_PROPERTIES: |
         zookeeper.address: zookeeper:2181
         tablet-server.id: 0
-        bind.listeners: INTERNAL://tablet-server:0, CLIENT://tablet-server:9123, PLAIN_CLIENT://tablet-server:9223
-        advertised.listeners: CLIENT://localhost:9124, PLAIN_CLIENT://localhost:9224
-        internal.listener.name: INTERNAL
-        security.protocol.map: CLIENT:sasl
-        security.sasl.enabled.mechanisms: plain
-        security.sasl.plain.jaas.config: org.apache.fluss.security.auth.sasl.plain.PlainLoginModule required user_admin="admin-secret" user_alice="alice-secret";
-        data.dir: /tmp/fluss/data
-        remote.data.dir: /tmp/fluss/remote-data
-    volumes:
-      - fluss-data:/tmp/fluss
+        bind.listeners: FLUSS://tablet-server:9333,CLIENT://tablet-server:9123
+        advertised.listeners: FLUSS://tablet-server:9333,CLIENT://tablet-server:9123
+        kv.snapshot.interval: 0s
+    ports:
+      - "9124:9123"
+
+  # ---- Fluss Gateway (REST API) ----
+  fluss-gateway:
+    image: fluss-gateway:latest
+    # Wait for coordinator to be fully ready, then delay before connecting
+    entrypoint: ["sh", "-c", "sleep 5 && exec fluss-gateway serve --fluss-coordinator=coordinator-server:9123 --host=0.0.0.0 --port=8080 --log-level=info"]
+    depends_on:
+      coordinator-server:
+        condition: service_healthy
+      tablet-server:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
 
 volumes:
   fluss-data:

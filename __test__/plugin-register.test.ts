@@ -7,40 +7,6 @@ import type {
   PluginHookName,
 } from "../src/types.js";
 
-// Mock fluss-node to avoid native binary dependency in tests
-vi.mock("fluss-node", () => ({
-  Config: vi.fn(),
-  FlussConnection: { create: vi.fn() },
-  DatabaseDescriptor: vi.fn(),
-  TablePath: vi.fn(),
-  Schema: {
-    builder: () => {
-      const b: Record<string, Function> = {
-        column: () => b,
-        build: () => ({}),
-      };
-      return b;
-    },
-  },
-  DataTypes: {
-    string: () => "STRING",
-    boolean: () => "BOOLEAN",
-    bigint: () => "BIGINT",
-    int: () => "INT",
-  },
-  TableDescriptor: {
-    builder: () => {
-      const b: Record<string, Function> = {
-        schema: () => b,
-        distributedBy: () => b,
-        property: () => b,
-        build: () => ({}),
-      };
-      return b;
-    },
-  },
-}));
-
 const ALL_HOOK_NAMES: PluginHookName[] = [
   "before_agent_start",
   "agent_end",
@@ -76,7 +42,7 @@ describe("plugin register & hook registration", () => {
 
     api = {
       pluginConfig: {
-        bootstrapServers: "localhost:9123",
+        gatewayUrl: "http://localhost:8080",
         databaseName: "test_db",
         tablePrefix: "hook_",
         autoCreateTable: true,
