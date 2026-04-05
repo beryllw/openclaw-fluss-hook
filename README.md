@@ -16,42 +16,42 @@ The plugin registers all 14 OpenClaw hook events. Each hook type maps to a separ
 
 | Hook | Table | Fires When | Key Fields |
 |------|-------|-----------|------------|
-| `before_agent_start` | `hook_before_agent_start` | Agent starts processing | `prompt`, `messages`, `agent_id`, `session_key`, `message_provider` |
-| `agent_end` | `hook_agent_end` | Agent finishes processing | `messages`, `success`, `error`, `duration_ms`, `agent_id` |
-| `before_compaction` | `hook_before_compaction` | Before history compaction | `message_count`, `token_count`, `agent_id` |
-| `after_compaction` | `hook_after_compaction` | After history compaction | `message_count`, `token_count`, `compacted_count`, `agent_id` |
+| `before_agent_start` | `hook_before_agent_start` | Agent starts processing | `prompt`, `messages`, `agent_id`, `session_key`, `message_provider`, `session_id`, `trigger`, `channel_id` |
+| `agent_end` | `hook_agent_end` | Agent finishes processing | `messages`, `success`, `error`, `duration_ms`, `agent_id`, `session_key`, `message_provider`, `session_id`, `trigger`, `channel_id` |
+| `before_compaction` | `hook_before_compaction` | Before history compaction | `message_count`, `token_count`, `compacting_count`, `agent_id`, `session_key`, `session_id`, `trigger`, `channel_id` |
+| `after_compaction` | `hook_after_compaction` | After history compaction | `message_count`, `token_count`, `compacted_count`, `agent_id`, `session_key`, `session_id`, `trigger`, `channel_id` |
 
 ### Message Hooks
 
 | Hook | Table | Fires When | Key Fields |
 |------|-------|-----------|------------|
-| `message_received` | `hook_message_received` | User sends message (external channels) | `from_id`, `content`, `event_timestamp`, `metadata`, `channel_id` |
-| `message_sending` | `hook_message_sending` | Reply about to be sent | `to_id`, `content`, `metadata`, `channel_id` |
-| `message_sent` | `hook_message_sent` | Reply delivery completed | `to_id`, `content`, `success`, `error`, `channel_id` |
+| `message_received` | `hook_message_received` | User sends message | `from_id`, `content`, `event_timestamp`, `metadata`, `channel_id`, `message_id`, `is_group`, `group_id` |
+| `message_sending` | `hook_message_sending` | Reply about to be sent | `to_id`, `content`, `metadata`, `channel_id`, `message_id`, `is_group`, `group_id` |
+| `message_sent` | `hook_message_sent` | Reply delivery completed | `to_id`, `content`, `success`, `error`, `channel_id`, `message_id`, `is_group`, `group_id` |
 
-> **Note:** `message_sending` and `message_sent` are [not triggered by current OpenClaw](./ISSUE-message-hooks-never-called.md). They remain registered for forward compatibility.
+> **Note:** `message_sending` and `message_sent` are only triggered via external channels (Telegram, WhatsApp, etc.). Local gateway (webchat) replies are streamed via WebSocket and do not pass through the outbound delivery pipeline.
 
 ### Tool Hooks
 
 | Hook | Table | Fires When | Key Fields |
 |------|-------|-----------|------------|
-| `before_tool_call` | `hook_before_tool_call` | Before tool invocation | `tool_name`, `params`, `agent_id`, `context_tool_name` |
-| `after_tool_call` | `hook_after_tool_call` | After tool invocation | `tool_name`, `params`, `result`, `error`, `duration_ms` |
+| `before_tool_call` | `hook_before_tool_call` | Before tool invocation | `tool_name`, `params`, `run_id`, `tool_call_id`, `agent_id`, `context_tool_name`, `context_run_id`, `context_tool_call_id`, `context_session_id` |
+| `after_tool_call` | `hook_after_tool_call` | After tool invocation | `tool_name`, `params`, `result`, `error`, `duration_ms`, `run_id`, `tool_call_id`, `context_run_id`, `context_tool_call_id`, `context_session_id` |
 | `tool_result_persist` | `hook_tool_result_persist` | Tool result persisted | `tool_name`, `tool_call_id`, `message`, `is_synthetic` |
 
 ### Session Hooks
 
 | Hook | Table | Fires When | Key Fields |
 |------|-------|-----------|------------|
-| `session_start` | `hook_session_start` | Session begins | `session_id`, `resumed_from`, `agent_id` |
-| `session_end` | `hook_session_end` | Session ends | `session_id`, `message_count`, `duration_ms` |
+| `session_start` | `hook_session_start` | Session begins | `session_id`, `resumed_from`, `session_key`, `agent_id` |
+| `session_end` | `hook_session_end` | Session ends | `session_id`, `message_count`, `duration_ms`, `session_key` |
 
 ### Gateway Hooks
 
 | Hook | Table | Fires When | Key Fields |
 |------|-------|-----------|------------|
-| `gateway_start` | `hook_gateway_start` | Gateway starts | `port` |
-| `gateway_stop` | `hook_gateway_stop` | Gateway stops | `reason` |
+| `gateway_start` | `hook_gateway_start` | Gateway starts | `port`, `context_port` |
+| `gateway_stop` | `hook_gateway_stop` | Gateway stops | `reason`, `context_port` |
 
 All tables include a `timestamp` (BIGINT, unix ms) column.
 
@@ -70,6 +70,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `session_key` | STRING | Session key (agent:session format) |
 | `workspace_dir` | STRING | Agent workspace directory |
 | `message_provider` | STRING | LLM provider name |
+| `session_id` | STRING | Session identifier |
+| `trigger` | STRING | What triggered the agent (api, cli, etc.) |
+| `channel_id` | STRING | Channel identifier |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_agent_end
@@ -84,6 +87,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `session_key` | STRING | Session key |
 | `workspace_dir` | STRING | Agent workspace directory |
 | `message_provider` | STRING | LLM provider name |
+| `session_id` | STRING | Session identifier |
+| `trigger` | STRING | What triggered the agent |
+| `channel_id` | STRING | Channel identifier |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_before_compaction
@@ -92,10 +98,14 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 |--------|------|-------------|
 | `message_count` | INT | Number of messages before compaction |
 | `token_count` | INT | Token count before compaction |
+| `compacting_count` | INT | Number of messages being compacted |
 | `agent_id` | STRING | Agent identifier |
 | `session_key` | STRING | Session key |
 | `workspace_dir` | STRING | Agent workspace directory |
 | `message_provider` | STRING | LLM provider name |
+| `session_id` | STRING | Session identifier |
+| `trigger` | STRING | What triggered the agent |
+| `channel_id` | STRING | Channel identifier |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_after_compaction
@@ -109,6 +119,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `session_key` | STRING | Session key |
 | `workspace_dir` | STRING | Agent workspace directory |
 | `message_provider` | STRING | LLM provider name |
+| `session_id` | STRING | Session identifier |
+| `trigger` | STRING | What triggered the agent |
+| `channel_id` | STRING | Channel identifier |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_message_received
@@ -122,6 +135,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `channel_id` | STRING | Channel identifier (telegram, slack, etc.) |
 | `account_id` | STRING | Channel account identifier |
 | `conversation_id` | STRING | Conversation identifier |
+| `message_id` | STRING | Message identifier |
+| `is_group` | BOOLEAN | Whether the message is from a group chat |
+| `group_id` | STRING | Group identifier (if group message) |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_message_sending
@@ -134,6 +150,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `channel_id` | STRING | Channel identifier |
 | `account_id` | STRING | Channel account identifier |
 | `conversation_id` | STRING | Conversation identifier |
+| `message_id` | STRING | Message identifier |
+| `is_group` | BOOLEAN | Whether sending to a group chat |
+| `group_id` | STRING | Group identifier (if group message) |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_message_sent
@@ -147,6 +166,9 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `channel_id` | STRING | Channel identifier |
 | `account_id` | STRING | Channel account identifier |
 | `conversation_id` | STRING | Conversation identifier |
+| `message_id` | STRING | Message identifier |
+| `is_group` | BOOLEAN | Whether sent to a group chat |
+| `group_id` | STRING | Group identifier (if group message) |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_before_tool_call
@@ -155,9 +177,14 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 |--------|------|-------------|
 | `tool_name` | STRING | Name of the tool being called |
 | `params` | STRING | JSON serialized tool parameters |
+| `run_id` | STRING | Tool run identifier |
+| `tool_call_id` | STRING | Tool call identifier |
 | `agent_id` | STRING | Agent identifier |
 | `session_key` | STRING | Session key |
 | `context_tool_name` | STRING | Tool name from hook context |
+| `context_run_id` | STRING | Run ID from hook context |
+| `context_tool_call_id` | STRING | Tool call ID from hook context |
+| `context_session_id` | STRING | Session ID from hook context |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_after_tool_call
@@ -169,9 +196,14 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `result` | STRING | JSON serialized tool result |
 | `error` | STRING | Error message (empty on success) |
 | `duration_ms` | BIGINT | Tool execution time in milliseconds |
+| `run_id` | STRING | Tool run identifier |
+| `tool_call_id` | STRING | Tool call identifier |
 | `agent_id` | STRING | Agent identifier |
 | `session_key` | STRING | Session key |
 | `context_tool_name` | STRING | Tool name from hook context |
+| `context_run_id` | STRING | Run ID from hook context |
+| `context_tool_call_id` | STRING | Tool call ID from hook context |
+| `context_session_id` | STRING | Session ID from hook context |
 | `timestamp` | BIGINT | Event time (unix ms) |
 
 ### hook_tool_result_persist
@@ -194,6 +226,7 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 |--------|------|-------------|
 | `session_id` | STRING | Session identifier |
 | `resumed_from` | STRING | Previous session ID if resumed |
+| `session_key` | STRING | Session key |
 | `agent_id` | STRING | Agent identifier |
 | `context_session_id` | STRING | Session ID from context |
 | `timestamp` | BIGINT | Event time (unix ms) |
@@ -205,6 +238,7 @@ All tables include a `timestamp` (BIGINT, unix ms) column.
 | `session_id` | STRING | Session identifier |
 | `message_count` | INT | Total messages in the session |
 | `duration_ms` | BIGINT | Session duration in milliseconds |
+| `session_key` | STRING | Session key |
 | `agent_id` | STRING | Agent identifier |
 | `context_session_id` | STRING | Session ID from context |
 | `timestamp` | BIGINT | Event time (unix ms) |
@@ -249,7 +283,31 @@ Tables are only created when the first event of that type arrives. In a typical 
 - An [OpenClaw](https://github.com/OpenClaw/OpenClaw) instance
 - A running [Apache Fluss](https://fluss.apache.org/) cluster
 
-### Quick Install (Recommended)
+### Download & Install (Recommended)
+
+Download the latest release package for your platform:
+
+| Platform | File |
+|----------|------|
+| macOS Apple Silicon | `fluss-hook-vX.Y.Z-darwin-arm64.tar.gz` |
+| Linux x86_64 | `fluss-hook-vX.Y.Z-linux-x64-gnu.tar.gz` |
+
+```bash
+tar xzf fluss-hook-v*.tar.gz
+cd fluss-hook
+./install.sh ~/.openclaw --bootstrap-servers your-fluss-server:9123
+```
+
+The install script copies the plugin and fluss-node binary into the OpenClaw plugins directory and prints the config snippet to add to `openclaw.json`.
+
+Options:
+
+```bash
+./install.sh --force ~/.openclaw                           # overwrite existing
+./install.sh --bootstrap-servers 192.168.1.100:9123 ~/.openclaw  # specify Fluss address
+```
+
+### Install from Source (Alternative)
 
 ```bash
 git clone <this-repo>
@@ -257,29 +315,7 @@ cd openclaw-fluss-hook
 ./scripts/install.sh ~/.openclaw       # Replace with your OpenClaw data directory
 ```
 
-The install script will:
-1. Auto-detect your platform (macOS / Linux, x64 / arm64)
-2. Download the pre-compiled `fluss-node` native addon
-3. Copy plugin files into the OpenClaw plugins directory
-4. Print the config snippet to add to `openclaw.json`
-
-Then add the printed config to your `openclaw.json` and restart OpenClaw.
-
-#### Install script options
-
-```bash
-# Use a local fluss-node build (skip download)
-./scripts/install.sh --fluss-node-dir /path/to/fluss-node-lib ~/.openclaw
-
-# Specify Fluss server address (for config snippet output)
-./scripts/install.sh --bootstrap-servers fluss.prod:9223 ~/.openclaw
-
-# Overwrite existing installation
-./scripts/install.sh --force ~/.openclaw
-
-# Download fluss-node only (without installing the plugin)
-./scripts/download-fluss-node.sh ./fluss-node-lib
-```
+This will auto-detect your platform, download the pre-compiled `fluss-node` native addon, and copy plugin files. See `./scripts/install.sh --help` for options.
 
 ### Configure the plugin
 
@@ -374,16 +410,39 @@ GROUP BY agent_id;
 
 See [demo/scripts/demo.sql](demo/scripts/demo.sql) for the full set of queries covering all 14 tables.
 
-## Docker Demo
+## Deployment Scenarios
 
-A complete Docker Compose demo is available in [`demo/`](demo/). It starts a full environment with ZooKeeper, Fluss, Flink, and OpenClaw with the plugin pre-installed. See [demo/README.md](demo/README.md) for instructions.
+| Scenario | Directories | Description |
+|----------|-------------|-------------|
+| **Demo** (full Docker stack) | [`demo/`](demo/) | ZooKeeper + Fluss + Flink + OpenClaw all-in-one Docker Compose |
+| **Plugin install** (existing OpenClaw) | [`deploy/`](deploy/) + `scripts/install.sh` | Deploy standalone Fluss cluster, install fluss-hook to existing OpenClaw |
+| **Docker OpenClaw** + Fluss cluster | [`deploy/`](deploy/) + [`deploy-openclaw/`](deploy-openclaw/) | Separate Fluss cluster and Docker-based OpenClaw |
+| **Local OpenClaw** (no Docker) | [`deploy/`](deploy/) + [`deploy-local/`](deploy-local/) | Non-Docker OpenClaw install with plugins on Linux server |
+
+### Pre-built fluss-node
+
+Pre-compiled native binaries are stored in `fluss-node-lib/` (darwin-arm64 and linux-x64-gnu). For Docker builds, extract the Linux binary first:
 
 ```bash
-cd demo
-./scripts/build-fluss-node.sh   # one-time: compile fluss-node for Linux
-./scripts/build.sh              # build the OpenClaw + plugin image
-docker compose up -d            # start all services
+./scripts/prepare-fluss-node.sh    # extracts zip -> fluss-node-lib/linux-x64-gnu/
 ```
+
+Or compile from source:
+
+```bash
+./scripts/build-fluss-node.sh --output-dir fluss-node-lib/linux-x64-gnu
+```
+
+### Quick Start: Demo
+
+```bash
+./scripts/prepare-fluss-node.sh   # one-time: extract fluss-node for Linux
+cd demo
+./scripts/build.sh                # build the OpenClaw + plugin image
+docker compose up -d              # start all services
+```
+
+See [demo/README.md](demo/README.md) for the full walkthrough.
 
 ## Development
 
@@ -391,7 +450,7 @@ docker compose up -d            # start all services
 # Install dev dependencies
 npm install
 
-# Run tests (68 tests)
+# Run tests (83 tests)
 npm test
 
 # Type check
@@ -413,16 +472,25 @@ npm run test:watch
 │   ├── message-buffer.ts     # MultiTableBuffer — per-table batch + periodic flush
 │   ├── schema.ts             # 14 table schemas + registry
 │   └── types.ts              # Type definitions (14 hook event types, config)
+├── fluss-node-lib/           # Pre-compiled native binaries (zip files tracked by git)
+│   ├── bindings-darwin-arm64.zip
+│   ├── bindings-linux-x64-gnu.zip
+│   └── linux-x64-gnu/       # Extracted Linux binary (generated, gitignored)
+├── docker/
+│   ├── Dockerfile.fluss-node-base  # Shared base toolchain (Rust + Node.js + protoc)
+│   └── Dockerfile.fluss-node       # Compile phase (git clone + napi build)
 ├── scripts/
-│   ├── install.sh            # One-command plugin installer
-│   └── download-fluss-node.sh # Download pre-compiled fluss-node binary
-├── __test__/                 # Vitest test suite (68 tests)
-│   ├── config.test.ts
-│   ├── event-mappers.test.ts
-│   ├── message-buffer.test.ts
-│   ├── plugin-register.test.ts
-│   └── plugin-e2e.test.ts
-├── demo/                     # Docker Compose demo environment
+│   ├── install.sh            # Plugin installer (requires repo clone)
+│   ├── release-install.sh    # Self-contained installer (bundled in release package)
+│   ├── package-release.sh    # Build release tar.gz packages
+│   ├── download-fluss-node.sh # Download pre-compiled fluss-node binary
+│   ├── build-fluss-node.sh   # Compile fluss-node from source in Docker
+│   └── prepare-fluss-node.sh # Extract pre-compiled zip for Docker builds
+├── __test__/                 # Vitest test suite (83 tests)
+├── demo/                     # Scenario 1: Full Docker Compose demo
+├── deploy/                   # Standalone Fluss + Flink cluster
+├── deploy-openclaw/          # Scenario 3: Docker OpenClaw deployment
+├── deploy-local/             # Scenario 2b: Non-Docker local OpenClaw deployment
 ├── openclaw.plugin.json      # Plugin manifest with config schema
 ├── package.json
 └── tsconfig.json

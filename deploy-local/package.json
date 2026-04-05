@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Local deployment of OpenClaw with fluss-hook and DingTalk plugins",
+  "dependencies": {
+    "openclaw": "latest"
+  }
+}

@@ -52,9 +52,16 @@ export class FlussClientManager {
 
   private async connect(): Promise<void> {
     try {
-      const flussConfig = new Config({
+      const configOpts: Record<string, string> = {
         "bootstrap.servers": this.config.bootstrapServers,
-      });
+      };
+      if (this.config.username && this.config.password) {
+        configOpts["security.protocol"] = "sasl";
+        configOpts["security.sasl.mechanism"] = "PLAIN";
+        configOpts["security.sasl.username"] = this.config.username;
+        configOpts["security.sasl.password"] = this.config.password;
+      }
+      const flussConfig = new Config(configOpts);
       this.connection = await FlussConnection.create(flussConfig);
       this.connected = true;
       this.logger.info(

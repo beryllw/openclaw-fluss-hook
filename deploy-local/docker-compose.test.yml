@@ -1,0 +1,9 @@
+services:
+  openclaw:
+    build:
+      context: ..
+      dockerfile: deploy-local/Dockerfile.test
+    env_file: .env
+    ports:
+      - "18789:18789"
+    init: true

@@ -40,6 +40,7 @@ export type PluginHookAgentEndEvent = {
 export type PluginHookBeforeCompactionEvent = {
   messageCount: number;
   tokenCount?: number;
+  compactingCount?: number;
 };
 
 export type PluginHookAfterCompactionEvent = {
@@ -53,6 +54,9 @@ export type PluginHookAgentContext = {
   sessionKey?: string;
   workspaceDir?: string;
   messageProvider?: string;
+  sessionId?: string;
+  trigger?: string;
+  channelId?: string;
 };
 
 // -- Message Hooks --
@@ -81,6 +85,9 @@ export type PluginHookMessageContext = {
   channelId: string;
   accountId?: string;
   conversationId?: string;
+  messageId?: string;
+  isGroup?: boolean;
+  groupId?: string;
 };
 
 // -- Tool Hooks --
@@ -88,6 +95,8 @@ export type PluginHookMessageContext = {
 export type PluginHookBeforeToolCallEvent = {
   toolName: string;
   params: Record<string, unknown>;
+  runId?: string;
+  toolCallId?: string;
 };
 
 export type PluginHookAfterToolCallEvent = {
@@ -96,6 +105,8 @@ export type PluginHookAfterToolCallEvent = {
   result?: unknown;
   error?: string;
   durationMs?: number;
+  runId?: string;
+  toolCallId?: string;
 };
 
 export type PluginHookToolResultPersistEvent = {
@@ -109,6 +120,9 @@ export type PluginHookToolContext = {
   agentId?: string;
   sessionKey?: string;
   toolName: string;
+  runId?: string;
+  toolCallId?: string;
+  sessionId?: string;
 };
 
 export type PluginHookToolResultPersistContext = {
@@ -123,12 +137,14 @@ export type PluginHookToolResultPersistContext = {
 export type PluginHookSessionStartEvent = {
   sessionId: string;
   resumedFrom?: string;
+  sessionKey?: string;
 };
 
 export type PluginHookSessionEndEvent = {
   sessionId: string;
   messageCount: number;
   durationMs?: number;
+  sessionKey?: string;
 };
 
 export type PluginHookSessionContext = {
@@ -235,6 +251,8 @@ export type OpenClawPluginApi = {
 
 export type FlussHookConfig = {
   bootstrapServers: string;
+  username?: string;
+  password?: string;
   databaseName: string;
   tablePrefix: string;
   batchSize: number;

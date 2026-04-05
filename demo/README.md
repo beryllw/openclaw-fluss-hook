@@ -14,28 +14,25 @@ Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `
 ## Prerequisites
 
 - **Docker** (Docker Desktop, Docker Engine, or Podman)
-- **fluss-rust source** at `../../fluss-rust` — needed only once to compile fluss-node for Linux
-
-Expected directory layout:
-```
-VscodeProjects/
-├── fluss-rust/                 # Apache Fluss Rust client (for fluss-node compilation)
-└── openclaw-fluss-hook/        # This project
-    ├── src/                    # fluss-hook plugin source
-    └── demo/                   # <-- You are here
-```
 
 ## Quick Start
 
-### 1. Build fluss-node for Linux (one-time)
+### 1. Prepare fluss-node for Linux (one-time)
 
-Compiles the fluss-node native addon from Rust source inside a container:
+Extract the pre-compiled fluss-node native addon from the project root:
 
 ```bash
-./scripts/build-fluss-node.sh
+# From the project root directory (parent of demo/)
+./scripts/prepare-fluss-node.sh
 ```
 
-This produces `demo/fluss-node-lib/` with the Linux `.node` binary. Only needs to re-run when fluss-rust source changes.
+This extracts `fluss-node-lib/bindings-linux-x64-gnu.zip` into `fluss-node-lib/linux-x64-gnu/`. Only needs to re-run when upgrading fluss-node.
+
+To compile from source instead:
+
+```bash
+./scripts/build-fluss-node.sh --output-dir fluss-node-lib/linux-x64-gnu
+```
 
 ### 2. Download Flink Connector JAR
 
@@ -173,7 +170,7 @@ Tables are lazily created when the first event of each type arrives. In a typica
 | `tablet-server` | `apache/fluss:0.9.0-incubating-rc2` | - | Fluss data storage |
 | `jobmanager` | `flink:1.20-scala_2.12-java17` | 8083 | Flink Web UI & SQL |
 | `taskmanager` | `flink:1.20-scala_2.12-java17` | - | Flink task execution |
-| `openclaw` | `ghcr.io/openclaw/openclaw` + plugin | 18789 | AI gateway + fluss-hook |
+| `openclaw` | `alpine/openclaw` + plugin | 18789 | AI gateway + fluss-hook |
 
 ## Web UIs
 

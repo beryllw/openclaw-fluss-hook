@@ -10,6 +10,14 @@
         "type": "string",
         "description": "Fluss cluster bootstrap servers (e.g. localhost:9223)"
       },
+      "username": {
+        "type": "string",
+        "description": "Fluss SASL username (optional, enables SASL auth when set with password)"
+      },
+      "password": {
+        "type": "string",
+        "description": "Fluss SASL password (optional, enables SASL auth when set with username)"
+      },
       "databaseName": {
         "type": "string",
         "description": "Fluss database name"

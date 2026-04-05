@@ -21,6 +21,8 @@ FLUSS_NODE_DIR=""
 FLUSS_NODE_VERSION=""
 FLUSS_NODE_BASE_URL=""
 BOOTSTRAP_SERVERS="localhost:9223"
+FLUSS_USERNAME=""
+FLUSS_PASSWORD=""
 FORCE=false
 OPENCLAW_DATA_DIR=""
 
@@ -37,6 +39,8 @@ print_usage() {
   echo "  --version <VER>              fluss-node version for download"
   echo "  --base-url <URL>             Download base URL"
   echo "  --bootstrap-servers <ADDR>   Fluss address for config snippet (default: localhost:9223)"
+  echo "  --username <USER>            Fluss SASL username (optional)"
+  echo "  --password <PASS>            Fluss SASL password (optional)"
   echo "  --force                      Overwrite existing installation"
   echo "  -h, --help                   Show this help"
 }
@@ -51,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       FLUSS_NODE_BASE_URL="$2"; shift 2 ;;
     --bootstrap-servers)
       BOOTSTRAP_SERVERS="$2"; shift 2 ;;
+    --username)
+      FLUSS_USERNAME="$2"; shift 2 ;;
+    --password)
+      FLUSS_PASSWORD="$2"; shift 2 ;;
     --force)
       FORCE=true; shift ;;
     -h|--help)
@@ -218,6 +226,10 @@ echo '      "fluss-hook": {'
 echo '        "enabled": true,'
 echo '        "config": {'
 echo "          \"bootstrapServers\": \"$BOOTSTRAP_SERVERS\""
+if [ -n "$FLUSS_USERNAME" ] && [ -n "$FLUSS_PASSWORD" ]; then
+  echo ",          \"username\": \"$FLUSS_USERNAME\""
+  echo ",          \"password\": \"$FLUSS_PASSWORD\""
+fi
 echo '        }'
 echo '      }'
 echo '    }'
@@ -225,4 +237,8 @@ echo '  }'
 echo ""
 echo "Then restart OpenClaw. You should see in the logs:"
 echo '  [fluss-hook] Plugin registered (14 hooks)'
-echo "  [fluss-hook] Connected to Fluss at $BOOTSTRAP_SERVERS"
+if [ -n "$FLUSS_USERNAME" ] && [ -n "$FLUSS_PASSWORD" ]; then
+  echo "  [fluss-hook] Connected to Fluss at $BOOTSTRAP_SERVERS (SASL)"
+else
+  echo "  [fluss-hook] Connected to Fluss at $BOOTSTRAP_SERVERS"
+fi

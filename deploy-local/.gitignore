@@ -1,0 +1,4 @@
+node_modules/
+fluss-node-lib/
+.env
+*.zip

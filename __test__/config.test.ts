@@ -17,6 +17,8 @@ describe("resolveConfig", () => {
 
     expect(config).toEqual({
       bootstrapServers: "localhost:9223",
+      username: undefined,
+      password: undefined,
       databaseName: "openclaw",
       tablePrefix: "hook_",
       batchSize: 50,
@@ -93,5 +95,39 @@ describe("resolveConfig", () => {
     expect(config.bootstrapServers).toBe("custom-host:9223");
     expect(config.databaseName).toBe("env-db");
     expect(config.tablePrefix).toBe("hook_");
+  });
+
+  it("uses username/password from pluginConfig", () => {
+    const config = resolveConfig({
+      bootstrapServers: "sasl-host:9223",
+      username: "admin",
+      password: "secret",
+    });
+
+    expect(config.username).toBe("admin");
+    expect(config.password).toBe("secret");
+  });
+
+  it("uses username/password from pluginConfig over env vars", () => {
+    process.env.FLUSS_USERNAME = "env-user";
+    process.env.FLUSS_PASSWORD = "env-pass";
+
+    const config = resolveConfig({
+      username: "plugin-user",
+      password: "plugin-pass",
+    });
+
+    expect(config.username).toBe("plugin-user");
+    expect(config.password).toBe("plugin-pass");
+  });
+
+  it("ignores invalid username/password types", () => {
+    const config = resolveConfig({
+      username: 123,
+      password: null,
+    });
+
+    expect(config.username).toBeUndefined();
+    expect(config.password).toBeUndefined();
   });
 });

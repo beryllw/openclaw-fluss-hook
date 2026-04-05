@@ -1,0 +1,60 @@
+services:
+  # ---- ZooKeeper ----
+  zookeeper:
+    image: zookeeper:3.9.2
+    restart: "no"
+    tmpfs:
+      - /data
+      - /datalog
+
+  # ---- Fluss Coordinator (dual listeners: SASL on 9123, plaintext on 9223) ----
+  coordinator-server:
+    image: apache/fluss:0.9.0-incubating
+    command: coordinatorServer
+    depends_on:
+      - zookeeper
+    ports:
+      - "9123:9123"
+      - "9223:9223"
+    environment:
+      FLUSS_PROPERTIES: |
+        zookeeper.address: zookeeper:2181
+        bind.listeners: INTERNAL://coordinator-server:0, CLIENT://coordinator-server:9123, PLAIN_CLIENT://coordinator-server:9223
+        advertised.listeners: CLIENT://localhost:9123, PLAIN_CLIENT://localhost:9223
+        internal.listener.name: INTERNAL
+        security.protocol.map: CLIENT:sasl
+        security.sasl.enabled.mechanisms: plain
+        security.sasl.plain.jaas.config: org.apache.fluss.security.auth.sasl.plain.PlainLoginModule required user_admin="admin-secret" user_alice="alice-secret";
+    volumes:
+      - fluss-data:/tmp/fluss
+
+  # ---- Fluss Tablet Server (dual listeners matching coordinator) ----
+  tablet-server:
+    image: apache/fluss:0.9.0-incubating
+    command: tabletServer
+    depends_on:
+      - coordinator-server
+    ports:
+      - "9124:9123"
+      - "9224:9223"
+    environment:
+      FLUSS_PROPERTIES: |
+        zookeeper.address: zookeeper:2181
+        tablet-server.id: 0
+        bind.listeners: INTERNAL://tablet-server:0, CLIENT://tablet-server:9123, PLAIN_CLIENT://tablet-server:9223
+        advertised.listeners: CLIENT://localhost:9124, PLAIN_CLIENT://localhost:9224
+        internal.listener.name: INTERNAL
+        security.protocol.map: CLIENT:sasl
+        security.sasl.enabled.mechanisms: plain
+        security.sasl.plain.jaas.config: org.apache.fluss.security.auth.sasl.plain.PlainLoginModule required user_admin="admin-secret" user_alice="alice-secret";
+        data.dir: /tmp/fluss/data
+        remote.data.dir: /tmp/fluss/remote-data
+    volumes:
+      - fluss-data:/tmp/fluss
+
+volumes:
+  fluss-data:
+    driver: local
+    driver_opts:
+      type: "tmpfs"
+      device: "tmpfs"

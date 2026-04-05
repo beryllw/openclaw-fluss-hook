@@ -44,6 +44,16 @@ export function resolveConfig(
       envString("FLUSS_BOOTSTRAP_SERVERS") ??
       DEFAULTS.bootstrapServers,
 
+    username:
+      asString(cfg.username) ??
+      envString("FLUSS_USERNAME") ??
+      undefined,
+
+    password:
+      asString(cfg.password) ??
+      envString("FLUSS_PASSWORD") ??
+      undefined,
+
     databaseName:
       asString(cfg.databaseName) ??
       envString("FLUSS_DATABASE") ??

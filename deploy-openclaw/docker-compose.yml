@@ -1,0 +1,30 @@
+# OpenClaw Gateway Deployment
+# Standalone OpenClaw with pre-installed fluss-hook + DingTalk plugins.
+# Connects to an external Fluss cluster (deployed via ../deploy/).
+#
+# Usage:
+#   1. Run: ./scripts/setup.sh
+#   2. Edit .env (set API keys, Fluss address, optional DingTalk credentials)
+#   3. Run: ./scripts/build.sh
+#   4. Run: docker compose up -d
+
+services:
+  openclaw:
+    image: deploy-openclaw
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    environment:
+      HOME: /home/node
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      BAILIAN_API_KEY: ${BAILIAN_API_KEY:-}
+      DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:-}
+      DINGTALK_CLIENT_SECRET: ${DINGTALK_CLIENT_SECRET:-}
+      FLUSS_BOOTSTRAP_SERVERS: ${FLUSS_BOOTSTRAP_SERVERS:-localhost:9123}
+    volumes:
+      - ./config/openclaw.json:/tmp/openclaw-config.json:ro
+    command:
+      [
+        "sh", "-c",
+        "mkdir -p /home/node/.openclaw && cp /tmp/openclaw-config.json /home/node/.openclaw/openclaw.json && node dist/index.js gateway --allow-unconfigured --auth token --token ${OPENCLAW_GATEWAY_TOKEN} --bind lan"
+      ]

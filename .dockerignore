@@ -1,0 +1,12 @@
+.git/
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+dist/
+demo/flink-lib/*.jar
+deploy/flink-lib/*.jar
+.qoder/

@@ -1,0 +1,31 @@
+FROM --platform=linux/amd64 node:22-bookworm-slim
+
+# setup.sh needs unzip for fluss-node artifact extraction
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/app
+
+# Copy project files (secrets excluded via .dockerignore)
+COPY . .
+
+# Extract Linux fluss-node binary from pre-compiled zip
+RUN mkdir -p fluss-node-lib/linux-x64-gnu && \
+    unzip -o fluss-node-lib/bindings-linux-x64-gnu.zip \
+      -d fluss-node-lib/linux-x64-gnu/
+
+WORKDIR /opt/app/deploy-local
+
+# Run full setup.sh (npm install, fluss-hook plugin, DingTalk plugin, config)
+# DingTalk now installed via npm directly (bypasses ClawHub 429 rate limiting)
+RUN ./scripts/setup.sh \
+      --fluss-node-dir ../fluss-node-lib/linux-x64-gnu \
+      --registry https://registry.npmmirror.com \
+      --force
+
+# Remove generated placeholder .env; real env vars injected by docker-compose
+RUN rm -f .env
+
+EXPOSE 18789
+CMD ["./scripts/start.sh"]

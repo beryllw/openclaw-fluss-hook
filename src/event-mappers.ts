@@ -44,6 +44,9 @@ export function mapBeforeAgentStart(
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
     message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -61,6 +64,9 @@ export function mapAgentEnd(
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
     message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -72,10 +78,14 @@ export function mapBeforeCompaction(
   return {
     message_count: event.messageCount,
     token_count: event.tokenCount ?? 0,
+    compacting_count: event.compactingCount ?? 0,
     agent_id: ctx.agentId ?? "",
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
     message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -92,6 +102,9 @@ export function mapAfterCompaction(
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
     message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -112,6 +125,9 @@ export function mapMessageReceived(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
+    message_id: ctx.messageId ?? "",
+    is_group: ctx.isGroup ?? false,
+    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -127,6 +143,9 @@ export function mapMessageSending(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
+    message_id: ctx.messageId ?? "",
+    is_group: ctx.isGroup ?? false,
+    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -143,6 +162,9 @@ export function mapMessageSent(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
+    message_id: ctx.messageId ?? "",
+    is_group: ctx.isGroup ?? false,
+    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -158,9 +180,14 @@ export function mapBeforeToolCall(
   return {
     tool_name: event.toolName,
     params: safeJson(event.params),
+    run_id: event.runId ?? "",
+    tool_call_id: event.toolCallId ?? "",
     agent_id: ctx.agentId ?? "",
     session_key: ctx.sessionKey ?? "",
     context_tool_name: ctx.toolName,
+    context_run_id: ctx.runId ?? "",
+    context_tool_call_id: ctx.toolCallId ?? "",
+    context_session_id: ctx.sessionId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -175,9 +202,14 @@ export function mapAfterToolCall(
     result: safeJson(event.result),
     error: event.error ?? "",
     duration_ms: event.durationMs ?? 0,
+    run_id: event.runId ?? "",
+    tool_call_id: event.toolCallId ?? "",
     agent_id: ctx.agentId ?? "",
     session_key: ctx.sessionKey ?? "",
     context_tool_name: ctx.toolName,
+    context_run_id: ctx.runId ?? "",
+    context_tool_call_id: ctx.toolCallId ?? "",
+    context_session_id: ctx.sessionId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -210,6 +242,7 @@ export function mapSessionStart(
   return {
     session_id: event.sessionId,
     resumed_from: event.resumedFrom ?? "",
+    session_key: event.sessionKey ?? "",
     agent_id: ctx.agentId ?? "",
     context_session_id: ctx.sessionId,
     timestamp: Date.now(),
@@ -224,6 +257,7 @@ export function mapSessionEnd(
     session_id: event.sessionId,
     message_count: event.messageCount,
     duration_ms: event.durationMs ?? 0,
+    session_key: event.sessionKey ?? "",
     agent_id: ctx.agentId ?? "",
     context_session_id: ctx.sessionId,
     timestamp: Date.now(),

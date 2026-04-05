@@ -1,0 +1,47 @@
+# OpenClaw Gateway + fluss-hook + DingTalk plugin
+#
+# Based on the official OpenClaw image.
+# Pre-installs:
+#   - @dingtalk-real-ai/dingtalk-connector (DingTalk channel plugin)
+#   - openclaw-fluss-hook (Fluss hook event logger)
+#
+# Prerequisites: run ./scripts/prepare-fluss-node.sh to extract fluss-node for Linux.
+#
+# Build context: openclaw-fluss-hook project root (parent of deploy-openclaw/)
+# See scripts/build.sh
+
+ARG OPENCLAW_IMAGE=alpine/openclaw:latest
+FROM ${OPENCLAW_IMAGE}
+
+USER root
+WORKDIR /app
+
+# --- Pre-install DingTalk channel plugin ---
+# Install via npm directly to /app/plugins/ (bypasses ClawHub 429 rate-limiting)
+RUN mkdir -p /app/plugins/dingtalk-connector && \
+    cd /app/plugins/dingtalk-connector && \
+    npm init -y --silent 2>/dev/null && \
+    NPM_CONFIG_REGISTRY=https://registry.npmmirror.com \
+    npm install @dingtalk-real-ai/dingtalk-connector && \
+    DTSRC=node_modules/@dingtalk-real-ai/dingtalk-connector && \
+    cp "$DTSRC/openclaw.plugin.json" . 2>/dev/null || true && \
+    cp "$DTSRC/index.ts" . 2>/dev/null || true && \
+    cp -r "$DTSRC/src" . 2>/dev/null || true
+
+# --- Pre-built fluss-node binary (from fluss-node-lib/linux-x64-gnu/) ---
+COPY fluss-node-lib/linux-x64-gnu/ /app/fluss-node-lib/
+
+# --- fluss-hook plugin source ---
+COPY index.ts /app/plugins/fluss-hook/index.ts
+COPY src/ /app/plugins/fluss-hook/src/
+COPY openclaw.plugin.json /app/plugins/fluss-hook/openclaw.plugin.json
+COPY package.json /app/plugins/fluss-hook/package.json
+COPY tsconfig.json /app/plugins/fluss-hook/tsconfig.json
+
+# Link fluss-node into plugin's node_modules
+RUN mkdir -p /app/plugins/fluss-hook/node_modules \
+    && ln -s /app/fluss-node-lib /app/plugins/fluss-hook/node_modules/fluss-node
+
+RUN chown -R node:node /app/fluss-node-lib /app/plugins
+
+USER node
