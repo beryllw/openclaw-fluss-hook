@@ -63,7 +63,7 @@
       "fluss-hook": {
         "enabled": true,
         "config": {
-          "bootstrapServers": "${FLUSS_BOOTSTRAP_SERVERS}",
+          "gatewayUrl": "${FLUSS_GATEWAY_URL}",
           "databaseName": "openclaw",
           "tablePrefix": "hook_",
           "autoCreateTable": true,

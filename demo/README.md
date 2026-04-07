@@ -5,8 +5,8 @@ End-to-end demonstration: user chats with OpenClaw AI, all hook events are synce
 ## Architecture
 
 ```
-User --> OpenClaw Gateway --> fluss-hook --> Fluss Cluster <-- Flink SQL
-              :18789          (14 hooks)   coordinator:9123    :8083
+User --> OpenClaw Gateway --> fluss-hook --> Fluss Gateway --> Fluss Cluster <-- Flink SQL
+              :18789          (14 hooks)     REST API :8080   coordinator:9123    :8083
 ```
 
 Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `hook_before_tool_call`). Tables are lazily created on first event arrival.
@@ -17,30 +17,13 @@ Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `
 
 ## Quick Start
 
-### 1. Prepare fluss-node for Linux (one-time)
-
-Extract the pre-compiled fluss-node native addon from the project root:
-
-```bash
-# From the project root directory (parent of demo/)
-./scripts/prepare-fluss-node.sh
-```
-
-This extracts `fluss-node-lib/bindings-linux-x64-gnu.zip` into `fluss-node-lib/linux-x64-gnu/`. Only needs to re-run when upgrading fluss-node.
-
-To compile from source instead:
-
-```bash
-./scripts/build-fluss-node.sh --output-dir fluss-node-lib/linux-x64-gnu
-```
-
-### 2. Download Flink Connector JAR
+### 1. Download Flink Connector JAR
 
 ```bash
 ./scripts/setup.sh
 ```
 
-### 3. Configure LLM API Key
+### 2. Configure LLM API Key
 
 Edit `.env` and set at least one LLM provider key:
 
@@ -50,17 +33,17 @@ BAILIAN_API_KEY=sk-...
 
 The default model configuration uses `qwen3.5-plus` and `qwen3-coder-plus`. To use other providers, modify `config/openclaw.json`.
 
-### 4. Build & Start
+### 3. Build & Start
 
 ```bash
 # Build the image (pulls official OpenClaw image, layers plugin on top — fast)
 ./scripts/build.sh
 
-# Start all 6 services
+# Start all services (ZooKeeper + Fluss + Gateway + Flink + OpenClaw)
 docker compose up -d
 ```
 
-### 5. Verify Services
+### 4. Verify Services
 
 ```bash
 docker compose ps
@@ -168,6 +151,7 @@ Tables are lazily created when the first event of each type arrives. In a typica
 | `zookeeper` | `zookeeper:3.9.2` | - | Fluss coordination |
 | `coordinator-server` | `apache/fluss:0.9.0-incubating-rc2` | 9123 | Fluss metadata |
 | `tablet-server` | `apache/fluss:0.9.0-incubating-rc2` | - | Fluss data storage |
+| `fluss-gateway` | `fluss-gateway:latest` | 8080 | REST API for Fluss |
 | `jobmanager` | `flink:1.20-scala_2.12-java17` | 8083 | Flink Web UI & SQL |
 | `taskmanager` | `flink:1.20-scala_2.12-java17` | - | Flink task execution |
 | `openclaw` | `alpine/openclaw` + plugin | 18789 | AI gateway + fluss-hook |
@@ -183,7 +167,7 @@ The plugin config in `config/openclaw.json`:
 
 ```json
 {
-  "bootstrapServers": "coordinator-server:9123",
+  "gatewayUrl": "http://fluss-gateway:8080",
   "databaseName": "openclaw",
   "tablePrefix": "hook_",
   "autoCreateTable": true,
@@ -194,6 +178,7 @@ The plugin config in `config/openclaw.json`:
 
 | Key | Description |
 |-----|-------------|
+| `gatewayUrl` | Fluss Gateway REST API URL |
 | `tablePrefix` | Prefix for all hook tables (e.g. `hook_` creates `hook_agent_end`) |
 | `autoCreateTable` | Auto-create database and tables on first event |
 | `batchSize` | Rows buffered per table before flush |
@@ -227,6 +212,14 @@ docker compose exec openclaw ls -la /app/plugins/fluss-hook/
 ### Flink SQL: "Table not found"
 
 Tables are auto-created when the first event arrives. Send at least one message via the OpenClaw UI before querying. Run `SHOW TABLES;` to see which tables exist.
+
+### Connection refused to Fluss Gateway
+
+The Fluss Gateway waits for the coordinator to be healthy. Check:
+
+```bash
+docker compose logs fluss-gateway | tail -20
+```
 
 ### Connection refused to coordinator-server
 

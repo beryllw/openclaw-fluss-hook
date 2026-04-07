@@ -1,33 +1,35 @@
 #!/usr/bin/env bash
-# One-command installer for fluss-hook OpenClaw plugin.
+# Installer for fluss-hook OpenClaw plugin.
 #
-# Downloads fluss-node (or uses a local copy), copies plugin files
-# into the OpenClaw plugins directory, and prints the config snippet
-# to add to openclaw.json.
+# Copies plugin source files into the OpenClaw plugins directory
+# and prints the config snippet to add to openclaw.json.
+#
+# No native binaries required — the plugin uses Fluss Gateway REST API.
 #
 # Usage:
 #   ./scripts/install.sh <openclaw-data-dir>
-#   ./scripts/install.sh --fluss-node-dir ./my-fluss-node ~/.openclaw
-#   ./scripts/install.sh --bootstrap-servers fluss.prod:9223 ~/.openclaw
+#   ./scripts/install.sh --gateway-url http://fluss-gateway:8080 ~/.openclaw
 #
 # Examples:
 #   ./scripts/install.sh ~/.openclaw
 #   ./scripts/install.sh --force ~/.openclaw
-#   ./scripts/install.sh --fluss-node-dir demo/fluss-node-lib ~/.openclaw
+#   ./scripts/install.sh --gateway-url http://192.168.1.100:8080 ~/.openclaw
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────
-FLUSS_NODE_DIR=""
-FLUSS_NODE_VERSION=""
-FLUSS_NODE_BASE_URL=""
-BOOTSTRAP_SERVERS="localhost:9223"
-FLUSS_USERNAME=""
-FLUSS_PASSWORD=""
+GATEWAY_URL=""
 FORCE=false
 OPENCLAW_DATA_DIR=""
 
+# Determine project root:
+# - When running from repo: script is in scripts/, project root is ..
+# - When running from release package: script is in root, project root is .
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -f "$SCRIPT_DIR/index.ts" ]; then
+  PROJECT_ROOT="$SCRIPT_DIR"  # release package (script in root)
+else
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"  # in repo (script in scripts/)
+fi
 PLUGIN_NAME="fluss-hook"
 
 # ── Parse arguments ───────────────────────────────────────────
@@ -35,30 +37,15 @@ print_usage() {
   echo "Usage: $(basename "$0") [options] <openclaw-data-directory>"
   echo ""
   echo "Options:"
-  echo "  --fluss-node-dir <DIR>       Use existing fluss-node directory (skip download)"
-  echo "  --version <VER>              fluss-node version for download"
-  echo "  --base-url <URL>             Download base URL"
-  echo "  --bootstrap-servers <ADDR>   Fluss address for config snippet (default: localhost:9223)"
-  echo "  --username <USER>            Fluss SASL username (optional)"
-  echo "  --password <PASS>            Fluss SASL password (optional)"
-  echo "  --force                      Overwrite existing installation"
-  echo "  -h, --help                   Show this help"
+  echo "  --gateway-url <URL>        Fluss Gateway REST API URL for config snippet"
+  echo "  --force                    Overwrite existing installation"
+  echo "  -h, --help                 Show this help"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --fluss-node-dir)
-      FLUSS_NODE_DIR="$2"; shift 2 ;;
-    --version)
-      FLUSS_NODE_VERSION="$2"; shift 2 ;;
-    --base-url)
-      FLUSS_NODE_BASE_URL="$2"; shift 2 ;;
-    --bootstrap-servers)
-      BOOTSTRAP_SERVERS="$2"; shift 2 ;;
-    --username)
-      FLUSS_USERNAME="$2"; shift 2 ;;
-    --password)
-      FLUSS_PASSWORD="$2"; shift 2 ;;
+    --gateway-url)
+      GATEWAY_URL="$2"; shift 2 ;;
     --force)
       FORCE=true; shift ;;
     -h|--help)
@@ -104,46 +91,7 @@ if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/openclaw.plugin.json" ]; then
   echo "Existing installation found, will overwrite (--force)."
 fi
 
-# ── Step 3: Obtain fluss-node ─────────────────────────────────
-CLEANUP_FLUSS_NODE=false
-
-if [ -n "$FLUSS_NODE_DIR" ]; then
-  # Use user-provided directory
-  if [ ! -d "$FLUSS_NODE_DIR" ]; then
-    echo "ERROR: fluss-node directory does not exist: $FLUSS_NODE_DIR" >&2
-    exit 1
-  fi
-  if [ ! -f "$FLUSS_NODE_DIR/index.js" ]; then
-    echo "ERROR: Invalid fluss-node directory (index.js not found): $FLUSS_NODE_DIR" >&2
-    exit 1
-  fi
-  # Resolve to absolute path
-  FLUSS_NODE_DIR="$(cd "$FLUSS_NODE_DIR" && pwd)"
-  echo "Using local fluss-node: $FLUSS_NODE_DIR"
-  USE_SYMLINK=true
-else
-  # Download fluss-node
-  echo "=== Downloading fluss-node ==="
-  DOWNLOAD_DIR="$(mktemp -d "/tmp/fluss-node-install-XXXXXX")"
-  CLEANUP_FLUSS_NODE=true
-  trap 'if [ "$CLEANUP_FLUSS_NODE" = true ]; then rm -rf "$DOWNLOAD_DIR"; fi' EXIT
-
-  DOWNLOAD_ARGS=()
-  if [ -n "$FLUSS_NODE_VERSION" ]; then
-    DOWNLOAD_ARGS+=(--version "$FLUSS_NODE_VERSION")
-  fi
-  if [ -n "$FLUSS_NODE_BASE_URL" ]; then
-    DOWNLOAD_ARGS+=(--base-url "$FLUSS_NODE_BASE_URL")
-  fi
-  DOWNLOAD_ARGS+=(--force)
-
-  "$SCRIPT_DIR/download-fluss-node.sh" "${DOWNLOAD_ARGS[@]}" "$DOWNLOAD_DIR"
-  FLUSS_NODE_DIR="$DOWNLOAD_DIR"
-  USE_SYMLINK=false
-  echo ""
-fi
-
-# ── Step 4: Deploy plugin files ───────────────────────────────
+# ── Step 3: Deploy plugin files ───────────────────────────────
 echo "=== Installing plugin ==="
 echo "  From: $PROJECT_ROOT"
 echo "  To:   $PLUGIN_DIR"
@@ -164,44 +112,19 @@ cp "$PROJECT_ROOT/src/types.ts"          "$PLUGIN_DIR/src/"
 
 echo "  Plugin files copied."
 
-# ── Step 5: Install fluss-node ────────────────────────────────
-FLUSS_NODE_TARGET="$PLUGIN_DIR/node_modules/fluss-node"
-mkdir -p "$PLUGIN_DIR/node_modules"
-
-# Remove old installation/symlink
-rm -rf "$FLUSS_NODE_TARGET"
-
-if [ "$USE_SYMLINK" = true ]; then
-  # Create symlink to user-provided directory
-  ln -s "$FLUSS_NODE_DIR" "$FLUSS_NODE_TARGET"
-  echo "  fluss-node linked: $FLUSS_NODE_TARGET -> $FLUSS_NODE_DIR"
-else
-  # Move downloaded files directly
-  mv "$FLUSS_NODE_DIR" "$FLUSS_NODE_TARGET"
-  CLEANUP_FLUSS_NODE=false  # Don't clean up, it's been moved
-  echo "  fluss-node installed to: $FLUSS_NODE_TARGET"
-fi
-
-# ── Step 6: Verify installation ───────────────────────────────
+# ── Step 4: Verify installation ───────────────────────────────
 echo ""
 echo "=== Verifying ==="
 
 ERRORS=0
 for f in index.ts openclaw.plugin.json package.json tsconfig.json \
          src/config.ts src/types.ts src/schema.ts src/event-mappers.ts \
-         src/fluss-client.ts src/message-buffer.ts \
-         node_modules/fluss-node/index.js; do
+         src/fluss-client.ts src/message-buffer.ts; do
   if [ ! -f "$PLUGIN_DIR/$f" ]; then
     echo "  MISSING: $f" >&2
     ERRORS=$((ERRORS + 1))
   fi
 done
-
-# Check for at least one .node binary
-if ! ls "$FLUSS_NODE_TARGET/"*.node &>/dev/null; then
-  echo "  MISSING: No .node native binary found in node_modules/fluss-node/" >&2
-  ERRORS=$((ERRORS + 1))
-fi
 
 if [ "$ERRORS" -gt 0 ]; then
   echo "" >&2
@@ -211,7 +134,7 @@ fi
 
 echo "  All files verified."
 
-# ── Step 7: Print config snippet ──────────────────────────────
+# ── Step 5: Print config snippet ──────────────────────────────
 echo ""
 echo "============================================================"
 echo "  Installation complete!"
@@ -225,10 +148,10 @@ echo '    "entries": {'
 echo '      "fluss-hook": {'
 echo '        "enabled": true,'
 echo '        "config": {'
-echo "          \"bootstrapServers\": \"$BOOTSTRAP_SERVERS\""
-if [ -n "$FLUSS_USERNAME" ] && [ -n "$FLUSS_PASSWORD" ]; then
-  echo ",          \"username\": \"$FLUSS_USERNAME\""
-  echo ",          \"password\": \"$FLUSS_PASSWORD\""
+if [ -n "$GATEWAY_URL" ]; then
+  echo "          \"gatewayUrl\": \"$GATEWAY_URL\""
+else
+  echo "          \"gatewayUrl\": \"http://localhost:8080\""
 fi
 echo '        }'
 echo '      }'
@@ -236,9 +159,4 @@ echo '    }'
 echo '  }'
 echo ""
 echo "Then restart OpenClaw. You should see in the logs:"
-echo '  [fluss-hook] Plugin registered (14 hooks)'
-if [ -n "$FLUSS_USERNAME" ] && [ -n "$FLUSS_PASSWORD" ]; then
-  echo "  [fluss-hook] Connected to Fluss at $BOOTSTRAP_SERVERS (SASL)"
-else
-  echo "  [fluss-hook] Connected to Fluss at $BOOTSTRAP_SERVERS"
-fi
+echo "  [fluss-hook] Plugin registered (14 hooks)"

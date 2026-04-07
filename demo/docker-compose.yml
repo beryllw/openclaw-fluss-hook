@@ -2,18 +2,36 @@ services:
   # ---- Fluss Cluster ----
   zookeeper:
     image: zookeeper:3.9.2
-    restart: always
+    restart: "no"
+    tmpfs:
+      - /data
+      - /datalog
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   coordinator-server:
     image: apache/fluss:0.9.0-incubating-rc2
     command: coordinatorServer
+    restart: "no"
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9123"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
     environment:
       - |
         FLUSS_PROPERTIES=
         zookeeper.address: zookeeper:2181
-        bind.listeners: FLUSS://coordinator-server:9123
+        bind.listeners: FLUSS://coordinator-server:0,CLIENT://coordinator-server:9123
+        advertised.listeners: FLUSS://coordinator-server:9333,CLIENT://coordinator-server:9123
         remote.data.dir: /tmp/fluss/remote-data
     volumes:
       - fluss-data:/tmp/fluss
@@ -21,17 +39,40 @@ services:
   tablet-server:
     image: apache/fluss:0.9.0-incubating-rc2
     command: tabletServer
+    restart: "no"
     depends_on:
-      - coordinator-server
+      coordinator-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9123"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
     environment:
       - |
         FLUSS_PROPERTIES=
         zookeeper.address: zookeeper:2181
-        bind.listeners: FLUSS://tablet-server:9123
+        tablet-server.id: 0
+        bind.listeners: FLUSS://tablet-server:9333,CLIENT://tablet-server:9123
+        advertised.listeners: FLUSS://tablet-server:9333,CLIENT://tablet-server:9123
         data.dir: /tmp/fluss/data
         remote.data.dir: /tmp/fluss/remote-data
+        kv.snapshot.interval: 0s
     volumes:
       - fluss-data:/tmp/fluss
+
+  # ---- Fluss Gateway (REST API) ----
+  fluss-gateway:
+    image: fluss-gateway:latest
+    entrypoint: ["sh", "-c", "sleep 5 && exec fluss-gateway serve --fluss-coordinator=coordinator-server:9123 --host=0.0.0.0 --port=8080 --log-level=info"]
+    depends_on:
+      coordinator-server:
+        condition: service_healthy
+      tablet-server:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
 
   # ---- Flink Cluster ----
   jobmanager:
@@ -67,14 +108,13 @@ services:
       - ./flink-lib:/tmp/jars
 
   # ---- OpenClaw Gateway + fluss-hook plugin ----
-  # Build image first: ./scripts/build.sh
   openclaw:
     image: demo-openclaw
     ports:
       - "18789:18789"
     depends_on:
-      - coordinator-server
-      - tablet-server
+      fluss-gateway:
+        condition: service_started
     init: true
     restart: unless-stopped
     environment:

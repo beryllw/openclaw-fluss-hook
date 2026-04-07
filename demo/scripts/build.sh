@@ -2,10 +2,8 @@
 # Build the OpenClaw + fluss-hook Docker image.
 #
 # This uses the official OpenClaw image as base and layers
-# fluss-node binary + fluss-hook plugin on top.
-#
-# Prerequisites:
-#   fluss-node-lib/ will be compiled automatically if missing
+# the fluss-hook plugin source on top.
+# No native binaries needed — the plugin uses Fluss Gateway REST API.
 #
 # Usage:
 #   ./scripts/build.sh              # default image name: demo-openclaw
@@ -39,23 +37,6 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEMO_DIR="$SCRIPT_DIR/.."
 PROJECT_ROOT="$(cd "$DEMO_DIR/.." && pwd)"
-
-# Check that fluss-node has been prepared; auto-prepare from zip or compile if missing
-FLUSS_NODE_LIB="$PROJECT_ROOT/fluss-node-lib/linux-x64-gnu"
-if [ ! -d "$FLUSS_NODE_LIB" ] || [ -z "$(ls "$FLUSS_NODE_LIB/"*.node 2>/dev/null)" ]; then
-  echo "fluss-node-lib/linux-x64-gnu/ not found or missing .node binaries ..."
-  echo ""
-  if [ -f "$PROJECT_ROOT/fluss-node-lib/bindings-linux-x64-gnu.zip" ]; then
-    echo "Extracting from pre-compiled zip ..."
-    "$PROJECT_ROOT/scripts/prepare-fluss-node.sh" --force
-  else
-    echo "No pre-compiled zip found — compiling from source ..."
-    FLUSS_BUILD_ARGS=(--output-dir "$FLUSS_NODE_LIB")
-    [ -n "$MIRROR" ] && FLUSS_BUILD_ARGS+=(--mirror "$MIRROR")
-    "$PROJECT_ROOT/scripts/build-fluss-node.sh" "${FLUSS_BUILD_ARGS[@]}"
-  fi
-  echo ""
-fi
 
 # Build mirror args for openclaw base image
 MIRROR_ARGS=""
