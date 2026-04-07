@@ -1,0 +1,56 @@
+name: CI & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  # ── Type Check & Unit Tests ──────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm vitest run --exclude '__test__/integration.test.ts'
+
+  # ── Build & Upload Release Asset ─────────────────────────────
+  release:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+
+      - name: Package release
+        run: |
+          chmod +x scripts/package-release.sh
+          ./scripts/package-release.sh ${{ github.ref_name }}
+
+      - name: Get version (strip 'v' prefix)
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Upload release asset
+        uses: shogo82148/actions-upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: build/fluss-hook-${{ github.ref_name }}.tar.gz
+          asset_name: fluss-hook-${{ github.ref_name }}.tar.gz
+          asset_content_type: application/gzip
