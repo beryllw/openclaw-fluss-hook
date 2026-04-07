@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "OpenClaw plugin to log all messages to Apache Fluss via fluss-gateway REST API",
   "type": "module",
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "openclaw": "^2026.4.5",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },

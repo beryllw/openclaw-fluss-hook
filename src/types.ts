@@ -21,6 +21,7 @@ export type PluginService = {
 
 // =============================================================================
 // Hook Event Types
+// Aligned with openclaw/src/plugins/types.ts
 // =============================================================================
 
 // -- Agent Hooks --
@@ -41,12 +42,15 @@ export type PluginHookBeforeCompactionEvent = {
   messageCount: number;
   tokenCount?: number;
   compactingCount?: number;
+  messages?: unknown[];
+  sessionFile?: string;
 };
 
 export type PluginHookAfterCompactionEvent = {
   messageCount: number;
   tokenCount?: number;
   compactedCount: number;
+  sessionFile?: string;
 };
 
 export type PluginHookAgentContext = {
@@ -57,6 +61,7 @@ export type PluginHookAgentContext = {
   sessionId?: string;
   trigger?: string;
   channelId?: string;
+  runId?: string;
 };
 
 // -- Message Hooks --
@@ -150,6 +155,7 @@ export type PluginHookSessionEndEvent = {
 export type PluginHookSessionContext = {
   agentId?: string;
   sessionId: string;
+  sessionKey?: string;
 };
 
 // -- Gateway Hooks --

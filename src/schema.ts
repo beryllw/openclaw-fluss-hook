@@ -244,7 +244,6 @@ export type CreateTableBody = {
   bucket_count: number;
   bucket_keys: string[];
   properties: Record<string, string>;
-  comment: string;
 };
 
 // =============================================================================
@@ -288,7 +287,6 @@ export function buildCreateTableBody(
     schema: def.columns.map((c) => ({ name: c.name, data_type: c.type })),
     bucket_count: config.bucketCount,
     bucket_keys: def.distributionKey,
-    properties: { "table.replication.factor": "1" },
-    comment: `OpenClaw hook event log for ${hookName}`,
+    properties: {},
   };
 }
