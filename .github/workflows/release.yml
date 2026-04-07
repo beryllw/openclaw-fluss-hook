@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package release
+        run: |
+          chmod +x scripts/package-release.sh
+          ./scripts/package-release.sh ${{ github.ref_name }}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/fluss-hook-${{ github.ref_name }}.tar.gz
