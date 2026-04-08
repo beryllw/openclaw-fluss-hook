@@ -1,0 +1,70 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "bailian": {
+        "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+        "apiKey": "${BAILIAN_API_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen3.5-plus",
+            "name": "qwen3.5-plus",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": { "thinkingFormat": "qwen" }
+          },
+          {
+            "id": "qwen3-coder-plus",
+            "name": "qwen3-coder-plus",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "bailian/qwen3.5-plus"
+      },
+      "models": {
+        "bailian/qwen3.5-plus": {},
+        "bailian/qwen3-coder-plus": {}
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  },
+  "plugins": {
+    "enabled": true,
+    "load": {
+      "paths": ["/home/node/.openclaw/extensions/fluss-hook"]
+    },
+    "entries": {
+      "fluss-hook": {
+        "enabled": true,
+        "config": {
+          "outputMode": "console",
+          "gatewayUrl": "http://localhost:8080",
+          "databaseName": "openclaw",
+          "tablePrefix": "hook_",
+          "autoCreateTable": true,
+          "batchSize": 1,
+          "flushIntervalMs": 1000
+        }
+      }
+    }
+  }
+}

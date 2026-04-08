@@ -1,0 +1,22 @@
+services:
+  # ---- OpenClaw Gateway + fluss-hook plugin (console mode) ----
+  openclaw:
+    image: test-local-openclaw
+    build:
+      context: ..
+      dockerfile: test-local/Dockerfile.openclaw
+    ports:
+      - "18790:18789"
+    init: true
+    environment:
+      HOME: /home/node
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      BAILIAN_API_KEY: ${BAILIAN_API_KEY:-}
+    volumes:
+      - ./config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ../demo/scripts/auto-approve.sh:/tmp/auto-approve.sh:ro
+    command:
+      [
+        "sh", "-c",
+        "sh /tmp/auto-approve.sh & node dist/index.js gateway --allow-unconfigured --auth token --token demo-fluss-hook-2026 --bind lan"
+      ]
