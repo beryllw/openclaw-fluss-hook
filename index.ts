@@ -49,7 +49,7 @@ const plugin: FlussHookPlugin = {
       // Prints events to stdout for local debugging, also records them
       const consoleSink = new ConsoleSink();
       recordingSink = new RecordingSink(consoleSink);
-      this.__recordingSink = recordingSink;
+      plugin.__recordingSink = recordingSink;
       sink = recordingSink;
     } else if (config.outputMode === "memory") {
       // Test-only mode: records events without writing anywhere
@@ -58,14 +58,14 @@ const plugin: FlussHookPlugin = {
         close: () => {},
       };
       recordingSink = new RecordingSink(noOpSink);
-      this.__recordingSink = recordingSink;
+      plugin.__recordingSink = recordingSink;
       sink = recordingSink;
     } else {
       sink = new GatewayClient(config, api.logger);
     }
 
     const buffer = new MultiTableBuffer(sink, config, api.logger);
-    this.__testBuffer = { flushAll: () => buffer.flushAll() };
+    plugin.__testBuffer = { flushAll: () => buffer.flushAll() };
 
     // -- Agent Hooks --
     api.on("before_model_resolve", (event, ctx) => {

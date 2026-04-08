@@ -41,6 +41,11 @@
       "bucketCount": {
         "type": "integer",
         "description": "Number of buckets for table distribution"
+      },
+      "outputMode": {
+        "type": "string",
+        "enum": ["fluss", "memory", "console"],
+        "description": "Output mode: fluss (production), memory (test), console (debug)"
       }
     }
   }

@@ -79,7 +79,7 @@ if ! touch "$OPENCLAW_DATA_DIR/.install-test" 2>/dev/null; then
 fi
 rm -f "$OPENCLAW_DATA_DIR/.install-test"
 
-PLUGIN_DIR="$OPENCLAW_DATA_DIR/plugins/$PLUGIN_NAME"
+PLUGIN_DIR="$OPENCLAW_DATA_DIR/extensions/$PLUGIN_NAME"
 
 # ── Step 2: Check existing installation ───────────────────────
 if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/openclaw.plugin.json" ]; then
@@ -103,6 +103,7 @@ cp "$PROJECT_ROOT/index.ts"              "$PLUGIN_DIR/"
 cp "$PROJECT_ROOT/package.json"          "$PLUGIN_DIR/"
 cp "$PROJECT_ROOT/tsconfig.json"         "$PLUGIN_DIR/"
 cp "$PROJECT_ROOT/openclaw.plugin.json"  "$PLUGIN_DIR/"
+cp "$PROJECT_ROOT/src/sink.ts"             "$PLUGIN_DIR/src/"
 cp "$PROJECT_ROOT/src/config.ts"         "$PLUGIN_DIR/src/"
 cp "$PROJECT_ROOT/src/event-mappers.ts"  "$PLUGIN_DIR/src/"
 cp "$PROJECT_ROOT/src/fluss-client.ts"   "$PLUGIN_DIR/src/"
@@ -118,7 +119,7 @@ echo "=== Verifying ==="
 
 ERRORS=0
 for f in index.ts openclaw.plugin.json package.json tsconfig.json \
-         src/config.ts src/types.ts src/schema.ts src/event-mappers.ts \
+         src/sink.ts src/config.ts src/types.ts src/schema.ts src/event-mappers.ts \
          src/fluss-client.ts src/message-buffer.ts; do
   if [ ! -f "$PLUGIN_DIR/$f" ]; then
     echo "  MISSING: $f" >&2

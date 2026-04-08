@@ -39,6 +39,7 @@ cp "$PROJECT_ROOT/openclaw.plugin.json"  "$STAGING/"
 
 # Source files
 mkdir -p "$STAGING/src"
+cp "$PROJECT_ROOT/src/sink.ts"             "$STAGING/src/"
 cp "$PROJECT_ROOT/src/config.ts"         "$STAGING/src/"
 cp "$PROJECT_ROOT/src/event-mappers.ts"  "$STAGING/src/"
 cp "$PROJECT_ROOT/src/fluss-client.ts"   "$STAGING/src/"
