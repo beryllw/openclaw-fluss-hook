@@ -148,12 +148,15 @@ describe("fluss-hook plugin end-to-end (multi-table)", () => {
     }
   });
 
-  it("registers all 14 hooks and a service", () => {
+  it("registers all 26 hooks and a service", () => {
     const hookNames: PluginHookName[] = [
-      "before_agent_start", "agent_end", "before_compaction", "after_compaction",
-      "message_received", "message_sending", "message_sent",
-      "before_tool_call", "after_tool_call", "tool_result_persist",
-      "session_start", "session_end", "gateway_start", "gateway_stop",
+      "before_model_resolve", "before_prompt_build", "before_agent_start", "agent_end",
+      "before_compaction", "after_compaction", "before_reset", "llm_input", "llm_output",
+      "inbound_claim", "before_dispatch", "message_received", "message_sending", "message_sent",
+      "before_message_write", "before_tool_call", "after_tool_call", "tool_result_persist",
+      "session_start", "session_end",
+      "subagent_spawning", "subagent_delivery_target", "subagent_spawned", "subagent_ended",
+      "gateway_start", "gateway_stop",
     ];
     for (const name of hookNames) {
       expect(handlers).toHaveProperty(name);
@@ -302,7 +305,7 @@ describe("fluss-hook plugin end-to-end (multi-table)", () => {
     }, { timeout: 3000 });
 
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("Plugin registered (14 hooks)"),
+      expect.stringContaining("Plugin registered (26 hooks, output=fluss)"),
     );
   });
 

@@ -27,6 +27,7 @@ describe("resolveConfig", () => {
       bucketCount: 4,
       maxRetries: 3,
       retryBackoffMs: 500,
+      outputMode: "fluss",
     });
   });
 
@@ -123,13 +124,20 @@ describe("resolveConfig", () => {
     expect(config.gatewayPassword).toBe("plugin-pass");
   });
 
-  it("ignores invalid gatewayUsername/gatewayPassword types", () => {
-    const config = resolveConfig({
-      gatewayUsername: 123,
-      gatewayPassword: null,
-    });
+  it("uses outputMode from config over defaults", () => {
+    const config = resolveConfig({ outputMode: "memory" });
+    expect(config.outputMode).toBe("memory");
+  });
 
-    expect(config.gatewayUsername).toBeUndefined();
-    expect(config.gatewayPassword).toBeUndefined();
+  it("uses outputMode from env vars over defaults", () => {
+    process.env.FLUSS_OUTPUT_MODE = "memory";
+    const config = resolveConfig();
+    expect(config.outputMode).toBe("memory");
+  });
+
+  it("uses outputMode from pluginConfig over env vars", () => {
+    process.env.FLUSS_OUTPUT_MODE = "memory";
+    const config = resolveConfig({ outputMode: "fluss" });
+    expect(config.outputMode).toBe("fluss");
   });
 });

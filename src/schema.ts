@@ -1,7 +1,7 @@
 import type { FlussHookConfig, PluginHookName } from "./types.js";
 
 // =============================================================================
-// Schema Definitions for all 14 hook tables
+// Schema Definitions for all 26 hook tables
 // =============================================================================
 
 /** REST API column type strings */
@@ -13,6 +13,41 @@ type SchemaDefinition = {
 };
 
 const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
+  // -- Agent Hooks --
+
+  before_model_resolve: {
+    columns: [
+      { name: "prompt", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "workspace_dir", type: "string" },
+      { name: "message_provider", type: "string" },
+      { name: "session_id", type: "string" },
+      { name: "trigger", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["agent_id"],
+  },
+
+  before_prompt_build: {
+    columns: [
+      { name: "prompt", type: "string" },
+      { name: "messages", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "workspace_dir", type: "string" },
+      { name: "message_provider", type: "string" },
+      { name: "session_id", type: "string" },
+      { name: "trigger", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["agent_id"],
+  },
+
   before_agent_start: {
     columns: [
       { name: "prompt", type: "string" },
@@ -24,6 +59,7 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "session_id", type: "string" },
       { name: "trigger", type: "string" },
       { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["agent_id"],
@@ -42,6 +78,7 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "session_id", type: "string" },
       { name: "trigger", type: "string" },
       { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["agent_id"],
@@ -52,6 +89,8 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "message_count", type: "int" },
       { name: "token_count", type: "int" },
       { name: "compacting_count", type: "int" },
+      { name: "session_file", type: "string" },
+      { name: "messages", type: "string" },
       { name: "agent_id", type: "string" },
       { name: "session_key", type: "string" },
       { name: "workspace_dir", type: "string" },
@@ -59,6 +98,7 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "session_id", type: "string" },
       { name: "trigger", type: "string" },
       { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["agent_id"],
@@ -69,6 +109,7 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "message_count", type: "int" },
       { name: "token_count", type: "int" },
       { name: "compacted_count", type: "int" },
+      { name: "session_file", type: "string" },
       { name: "agent_id", type: "string" },
       { name: "session_key", type: "string" },
       { name: "workspace_dir", type: "string" },
@@ -76,9 +117,112 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "session_id", type: "string" },
       { name: "trigger", type: "string" },
       { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["agent_id"],
+  },
+
+  before_reset: {
+    columns: [
+      { name: "session_file", type: "string" },
+      { name: "messages", type: "string" },
+      { name: "reason", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "workspace_dir", type: "string" },
+      { name: "message_provider", type: "string" },
+      { name: "session_id", type: "string" },
+      { name: "trigger", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "run_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["agent_id"],
+  },
+
+  llm_input: {
+    columns: [
+      { name: "run_id", type: "string" },
+      { name: "session_id", type: "string" },
+      { name: "provider", type: "string" },
+      { name: "model", type: "string" },
+      { name: "system_prompt", type: "string" },
+      { name: "prompt", type: "string" },
+      { name: "history_messages", type: "string" },
+      { name: "images_count", type: "int" },
+      { name: "agent_id", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "workspace_dir", type: "string" },
+      { name: "message_provider", type: "string" },
+      { name: "trigger", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["provider"],
+  },
+
+  llm_output: {
+    columns: [
+      { name: "run_id", type: "string" },
+      { name: "session_id", type: "string" },
+      { name: "provider", type: "string" },
+      { name: "model", type: "string" },
+      { name: "assistant_texts", type: "string" },
+      { name: "last_assistant", type: "string" },
+      { name: "usage", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "workspace_dir", type: "string" },
+      { name: "message_provider", type: "string" },
+      { name: "trigger", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["provider"],
+  },
+
+  inbound_claim: {
+    columns: [
+      { name: "content", type: "string" },
+      { name: "body", type: "string" },
+      { name: "body_for_agent", type: "string" },
+      { name: "transcript", type: "string" },
+      { name: "event_timestamp", type: "bigint" },
+      { name: "channel", type: "string" },
+      { name: "account_id", type: "string" },
+      { name: "conversation_id", type: "string" },
+      { name: "parent_conversation_id", type: "string" },
+      { name: "sender_id", type: "string" },
+      { name: "sender_name", type: "string" },
+      { name: "sender_username", type: "string" },
+      { name: "thread_id", type: "string" },
+      { name: "message_id", type: "string" },
+      { name: "is_group", type: "boolean" },
+      { name: "command_authorized", type: "boolean" },
+      { name: "was_mentioned", type: "boolean" },
+      { name: "metadata", type: "string" },
+      { name: "channel_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["channel_id"],
+  },
+
+  before_dispatch: {
+    columns: [
+      { name: "content", type: "string" },
+      { name: "body", type: "string" },
+      { name: "channel", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "sender_id", type: "string" },
+      { name: "is_group", type: "boolean" },
+      { name: "event_timestamp", type: "bigint" },
+      { name: "channel_id", type: "string" },
+      { name: "account_id", type: "string" },
+      { name: "conversation_id", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["channel_id"],
   },
 
   message_received: {
@@ -90,9 +234,6 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "channel_id", type: "string" },
       { name: "account_id", type: "string" },
       { name: "conversation_id", type: "string" },
-      { name: "message_id", type: "string" },
-      { name: "is_group", type: "boolean" },
-      { name: "group_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["channel_id"],
@@ -106,9 +247,6 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "channel_id", type: "string" },
       { name: "account_id", type: "string" },
       { name: "conversation_id", type: "string" },
-      { name: "message_id", type: "string" },
-      { name: "is_group", type: "boolean" },
-      { name: "group_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["channel_id"],
@@ -123,12 +261,20 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "channel_id", type: "string" },
       { name: "account_id", type: "string" },
       { name: "conversation_id", type: "string" },
-      { name: "message_id", type: "string" },
-      { name: "is_group", type: "boolean" },
-      { name: "group_id", type: "string" },
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["channel_id"],
+  },
+
+  before_message_write: {
+    columns: [
+      { name: "message", type: "string" },
+      { name: "session_key", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "ctx_session_key", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["agent_id"],
   },
 
   before_tool_call: {
@@ -206,6 +352,74 @@ const SCHEMAS: Record<PluginHookName, SchemaDefinition> = {
       { name: "timestamp", type: "bigint" },
     ],
     distributionKey: ["session_id"],
+  },
+
+  subagent_spawning: {
+    columns: [
+      { name: "child_session_key", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "label", type: "string" },
+      { name: "mode", type: "string" },
+      { name: "requester", type: "string" },
+      { name: "thread_requested", type: "boolean" },
+      { name: "run_id", type: "string" },
+      { name: "child_session_key_ctx", type: "string" },
+      { name: "requester_session_key", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["child_session_key"],
+  },
+
+  subagent_delivery_target: {
+    columns: [
+      { name: "child_session_key", type: "string" },
+      { name: "requester_session_key", type: "string" },
+      { name: "requester_origin", type: "string" },
+      { name: "child_run_id", type: "string" },
+      { name: "spawn_mode", type: "string" },
+      { name: "expects_completion_message", type: "boolean" },
+      { name: "run_id", type: "string" },
+      { name: "child_session_key_ctx", type: "string" },
+      { name: "requester_session_key_ctx", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["child_session_key"],
+  },
+
+  subagent_spawned: {
+    columns: [
+      { name: "child_session_key", type: "string" },
+      { name: "agent_id", type: "string" },
+      { name: "label", type: "string" },
+      { name: "mode", type: "string" },
+      { name: "requester", type: "string" },
+      { name: "thread_requested", type: "boolean" },
+      { name: "run_id", type: "string" },
+      { name: "run_id_ctx", type: "string" },
+      { name: "child_session_key_ctx", type: "string" },
+      { name: "requester_session_key", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["child_session_key"],
+  },
+
+  subagent_ended: {
+    columns: [
+      { name: "target_session_key", type: "string" },
+      { name: "target_kind", type: "string" },
+      { name: "reason", type: "string" },
+      { name: "send_farewell", type: "boolean" },
+      { name: "account_id", type: "string" },
+      { name: "run_id", type: "string" },
+      { name: "ended_at", type: "bigint" },
+      { name: "outcome", type: "string" },
+      { name: "error", type: "string" },
+      { name: "run_id_ctx", type: "string" },
+      { name: "child_session_key_ctx", type: "string" },
+      { name: "requester_session_key", type: "string" },
+      { name: "timestamp", type: "bigint" },
+    ],
+    distributionKey: ["child_session_key"],
   },
 
   gateway_start: {

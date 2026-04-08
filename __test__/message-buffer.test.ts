@@ -31,6 +31,7 @@ function createConfig(overrides?: Partial<FlussHookConfig>): FlussHookConfig {
     bucketCount: 4,
     maxRetries: 3,
     retryBackoffMs: 500,
+    outputMode: "fluss" as const,
     ...overrides,
   };
 }

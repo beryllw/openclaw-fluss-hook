@@ -1,9 +1,19 @@
 import type {
+  PluginHookBeforeModelResolveEvent,
+  PluginHookBeforePromptBuildEvent,
   PluginHookBeforeAgentStartEvent,
   PluginHookAgentEndEvent,
   PluginHookBeforeCompactionEvent,
   PluginHookAfterCompactionEvent,
+  PluginHookBeforeResetEvent,
+  PluginHookLlmInputEvent,
+  PluginHookLlmOutputEvent,
   PluginHookAgentContext,
+  PluginHookInboundClaimEvent,
+  PluginHookInboundClaimContext,
+  PluginHookBeforeDispatchEvent,
+  PluginHookBeforeDispatchContext,
+  PluginHookBeforeMessageWriteEvent,
   PluginHookMessageReceivedEvent,
   PluginHookMessageSendingEvent,
   PluginHookMessageSentEvent,
@@ -16,6 +26,11 @@ import type {
   PluginHookSessionStartEvent,
   PluginHookSessionEndEvent,
   PluginHookSessionContext,
+  PluginHookSubagentSpawningEvent,
+  PluginHookSubagentDeliveryTargetEvent,
+  PluginHookSubagentSpawnedEvent,
+  PluginHookSubagentEndedEvent,
+  PluginHookSubagentContext,
   PluginHookGatewayStartEvent,
   PluginHookGatewayStopEvent,
   PluginHookGatewayContext,
@@ -33,6 +48,43 @@ function safeJson(val: unknown): string {
 // Agent Hooks
 // =============================================================================
 
+export function mapBeforeModelResolve(
+  event: PluginHookBeforeModelResolveEvent,
+  ctx: PluginHookAgentContext,
+): Record<string, unknown> {
+  return {
+    prompt: event.prompt,
+    agent_id: ctx.agentId ?? "",
+    session_key: ctx.sessionKey ?? "",
+    workspace_dir: ctx.workspaceDir ?? "",
+    message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapBeforePromptBuild(
+  event: PluginHookBeforePromptBuildEvent,
+  ctx: PluginHookAgentContext,
+): Record<string, unknown> {
+  return {
+    prompt: event.prompt,
+    messages: safeJson(event.messages),
+    agent_id: ctx.agentId ?? "",
+    session_key: ctx.sessionKey ?? "",
+    workspace_dir: ctx.workspaceDir ?? "",
+    message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
+    timestamp: Date.now(),
+  };
+}
+
 export function mapBeforeAgentStart(
   event: PluginHookBeforeAgentStartEvent,
   ctx: PluginHookAgentContext,
@@ -47,6 +99,7 @@ export function mapBeforeAgentStart(
     session_id: ctx.sessionId ?? "",
     trigger: ctx.trigger ?? "",
     channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -67,6 +120,7 @@ export function mapAgentEnd(
     session_id: ctx.sessionId ?? "",
     trigger: ctx.trigger ?? "",
     channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -79,6 +133,8 @@ export function mapBeforeCompaction(
     message_count: event.messageCount,
     token_count: event.tokenCount ?? 0,
     compacting_count: event.compactingCount ?? 0,
+    session_file: event.sessionFile ?? "",
+    messages: safeJson(event.messages),
     agent_id: ctx.agentId ?? "",
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
@@ -86,6 +142,7 @@ export function mapBeforeCompaction(
     session_id: ctx.sessionId ?? "",
     trigger: ctx.trigger ?? "",
     channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -98,11 +155,78 @@ export function mapAfterCompaction(
     message_count: event.messageCount,
     token_count: event.tokenCount ?? 0,
     compacted_count: event.compactedCount,
+    session_file: event.sessionFile ?? "",
     agent_id: ctx.agentId ?? "",
     session_key: ctx.sessionKey ?? "",
     workspace_dir: ctx.workspaceDir ?? "",
     message_provider: ctx.messageProvider ?? "",
     session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapBeforeReset(
+  event: PluginHookBeforeResetEvent,
+  ctx: PluginHookAgentContext,
+): Record<string, unknown> {
+  return {
+    session_file: event.sessionFile ?? "",
+    messages: safeJson(event.messages),
+    reason: event.reason ?? "",
+    agent_id: ctx.agentId ?? "",
+    session_key: ctx.sessionKey ?? "",
+    workspace_dir: ctx.workspaceDir ?? "",
+    message_provider: ctx.messageProvider ?? "",
+    session_id: ctx.sessionId ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
+    run_id: ctx.runId ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapLlmInput(
+  event: PluginHookLlmInputEvent,
+  ctx: PluginHookAgentContext,
+): Record<string, unknown> {
+  return {
+    run_id: event.runId,
+    session_id: event.sessionId,
+    provider: event.provider,
+    model: event.model,
+    system_prompt: event.systemPrompt ?? "",
+    prompt: event.prompt,
+    history_messages: safeJson(event.historyMessages),
+    images_count: event.imagesCount,
+    agent_id: ctx.agentId ?? "",
+    session_key: ctx.sessionKey ?? "",
+    workspace_dir: ctx.workspaceDir ?? "",
+    message_provider: ctx.messageProvider ?? "",
+    trigger: ctx.trigger ?? "",
+    channel_id: ctx.channelId ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapLlmOutput(
+  event: PluginHookLlmOutputEvent,
+  ctx: PluginHookAgentContext,
+): Record<string, unknown> {
+  return {
+    run_id: event.runId,
+    session_id: event.sessionId,
+    provider: event.provider,
+    model: event.model,
+    assistant_texts: safeJson(event.assistantTexts),
+    last_assistant: safeJson(event.lastAssistant),
+    usage: safeJson(event.usage),
+    agent_id: ctx.agentId ?? "",
+    session_key: ctx.sessionKey ?? "",
+    workspace_dir: ctx.workspaceDir ?? "",
+    message_provider: ctx.messageProvider ?? "",
     trigger: ctx.trigger ?? "",
     channel_id: ctx.channelId ?? "",
     timestamp: Date.now(),
@@ -112,6 +236,53 @@ export function mapAfterCompaction(
 // =============================================================================
 // Message Hooks
 // =============================================================================
+
+export function mapInboundClaim(
+  event: PluginHookInboundClaimEvent,
+  ctx: PluginHookInboundClaimContext,
+): Record<string, unknown> {
+  return {
+    content: event.content,
+    body: event.body ?? "",
+    body_for_agent: event.bodyForAgent ?? "",
+    transcript: event.transcript ?? "",
+    event_timestamp: event.timestamp ?? 0,
+    channel: event.channel,
+    account_id: ctx.accountId ?? "",
+    conversation_id: ctx.conversationId ?? "",
+    parent_conversation_id: ctx.parentConversationId ?? "",
+    sender_id: ctx.senderId ?? "",
+    sender_name: event.senderName ?? "",
+    sender_username: event.senderUsername ?? "",
+    thread_id: event.threadId ?? "",
+    message_id: ctx.messageId ?? "",
+    is_group: event.isGroup,
+    command_authorized: event.commandAuthorized ?? false,
+    was_mentioned: event.wasMentioned ?? false,
+    metadata: safeJson(event.metadata),
+    channel_id: ctx.channelId,
+    timestamp: Date.now(),
+  };
+}
+
+export function mapBeforeDispatch(
+  event: PluginHookBeforeDispatchEvent,
+  ctx: PluginHookBeforeDispatchContext,
+): Record<string, unknown> {
+  return {
+    content: event.content,
+    body: event.body ?? "",
+    channel: event.channel ?? "",
+    session_key: event.sessionKey ?? "",
+    sender_id: event.senderId ?? "",
+    is_group: event.isGroup ?? false,
+    event_timestamp: event.timestamp ?? 0,
+    channel_id: ctx.channelId ?? "",
+    account_id: ctx.accountId ?? "",
+    conversation_id: ctx.conversationId ?? "",
+    timestamp: Date.now(),
+  };
+}
 
 export function mapMessageReceived(
   event: PluginHookMessageReceivedEvent,
@@ -125,9 +296,6 @@ export function mapMessageReceived(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
-    message_id: ctx.messageId ?? "",
-    is_group: ctx.isGroup ?? false,
-    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -143,9 +311,6 @@ export function mapMessageSending(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
-    message_id: ctx.messageId ?? "",
-    is_group: ctx.isGroup ?? false,
-    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -162,9 +327,6 @@ export function mapMessageSent(
     channel_id: ctx.channelId,
     account_id: ctx.accountId ?? "",
     conversation_id: ctx.conversationId ?? "",
-    message_id: ctx.messageId ?? "",
-    is_group: ctx.isGroup ?? false,
-    group_id: ctx.groupId ?? "",
     timestamp: Date.now(),
   };
 }
@@ -265,6 +427,86 @@ export function mapSessionEnd(
 }
 
 // =============================================================================
+// Subagent Hooks
+// =============================================================================
+
+export function mapSubagentSpawning(
+  event: PluginHookSubagentSpawningEvent,
+  ctx: PluginHookSubagentContext,
+): Record<string, unknown> {
+  return {
+    child_session_key: event.childSessionKey,
+    agent_id: event.agentId,
+    label: event.label ?? "",
+    mode: event.mode,
+    requester: safeJson(event.requester),
+    thread_requested: event.threadRequested,
+    run_id: ctx.runId ?? "",
+    child_session_key_ctx: ctx.childSessionKey ?? "",
+    requester_session_key: ctx.requesterSessionKey ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapSubagentDeliveryTarget(
+  event: PluginHookSubagentDeliveryTargetEvent,
+  ctx: PluginHookSubagentContext,
+): Record<string, unknown> {
+  return {
+    child_session_key: event.childSessionKey,
+    requester_session_key: event.requesterSessionKey,
+    requester_origin: safeJson(event.requesterOrigin),
+    child_run_id: event.childRunId ?? "",
+    spawn_mode: event.spawnMode ?? "",
+    expects_completion_message: event.expectsCompletionMessage,
+    run_id: ctx.runId ?? "",
+    child_session_key_ctx: ctx.childSessionKey ?? "",
+    requester_session_key_ctx: ctx.requesterSessionKey ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapSubagentSpawned(
+  event: PluginHookSubagentSpawnedEvent,
+  ctx: PluginHookSubagentContext,
+): Record<string, unknown> {
+  return {
+    child_session_key: event.childSessionKey,
+    agent_id: event.agentId,
+    label: event.label ?? "",
+    mode: event.mode,
+    requester: safeJson(event.requester),
+    thread_requested: event.threadRequested,
+    run_id: event.runId,
+    run_id_ctx: ctx.runId ?? "",
+    child_session_key_ctx: ctx.childSessionKey ?? "",
+    requester_session_key: ctx.requesterSessionKey ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+export function mapSubagentEnded(
+  event: PluginHookSubagentEndedEvent,
+  ctx: PluginHookSubagentContext,
+): Record<string, unknown> {
+  return {
+    target_session_key: event.targetSessionKey,
+    target_kind: event.targetKind,
+    reason: event.reason,
+    send_farewell: event.sendFarewell ?? false,
+    account_id: event.accountId ?? "",
+    run_id: event.runId ?? "",
+    ended_at: event.endedAt ?? 0,
+    outcome: event.outcome ?? "",
+    error: event.error ?? "",
+    run_id_ctx: ctx.runId ?? "",
+    child_session_key_ctx: ctx.childSessionKey ?? "",
+    requester_session_key: ctx.requesterSessionKey ?? "",
+    timestamp: Date.now(),
+  };
+}
+
+// =============================================================================
 // Gateway Hooks
 // =============================================================================
 
@@ -286,6 +528,23 @@ export function mapGatewayStop(
   return {
     reason: event.reason ?? "",
     context_port: ctx.port ?? 0,
+    timestamp: Date.now(),
+  };
+}
+
+// =============================================================================
+// before_message_write
+// =============================================================================
+
+export function mapBeforeMessageWrite(
+  event: PluginHookBeforeMessageWriteEvent,
+  ctx: { agentId?: string; sessionKey?: string },
+): Record<string, unknown> {
+  return {
+    message: safeJson(event.message),
+    session_key: event.sessionKey ?? "",
+    agent_id: event.agentId ?? "",
+    ctx_session_key: ctx.sessionKey ?? "",
     timestamp: Date.now(),
   };
 }

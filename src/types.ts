@@ -26,6 +26,15 @@ export type PluginService = {
 
 // -- Agent Hooks --
 
+export type PluginHookBeforeModelResolveEvent = {
+  prompt: string;
+};
+
+export type PluginHookBeforePromptBuildEvent = {
+  prompt: string;
+  messages?: unknown[];
+};
+
 export type PluginHookBeforeAgentStartEvent = {
   prompt: string;
   messages?: unknown[];
@@ -51,6 +60,39 @@ export type PluginHookAfterCompactionEvent = {
   tokenCount?: number;
   compactedCount: number;
   sessionFile?: string;
+};
+
+export type PluginHookBeforeResetEvent = {
+  sessionFile?: string;
+  messages?: unknown[];
+  reason?: string;
+};
+
+export type PluginHookLlmInputEvent = {
+  runId: string;
+  sessionId: string;
+  provider: string;
+  model: string;
+  systemPrompt?: string;
+  prompt: string;
+  historyMessages: unknown[];
+  imagesCount: number;
+};
+
+export type PluginHookLlmOutputEvent = {
+  runId: string;
+  sessionId: string;
+  provider: string;
+  model: string;
+  assistantTexts: string[];
+  lastAssistant?: unknown;
+  usage?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    total?: number;
+  };
 };
 
 export type PluginHookAgentContext = {
@@ -90,9 +132,57 @@ export type PluginHookMessageContext = {
   channelId: string;
   accountId?: string;
   conversationId?: string;
+};
+
+export type PluginHookInboundClaimContext = PluginHookMessageContext & {
+  parentConversationId?: string;
+  senderId?: string;
   messageId?: string;
+};
+
+export type PluginHookInboundClaimEvent = {
+  content: string;
+  body?: string;
+  bodyForAgent?: string;
+  transcript?: string;
+  timestamp?: number;
+  channel: string;
+  accountId?: string;
+  conversationId?: string;
+  parentConversationId?: string;
+  senderId?: string;
+  senderName?: string;
+  senderUsername?: string;
+  threadId?: string | number;
+  messageId?: string;
+  isGroup: boolean;
+  commandAuthorized?: boolean;
+  wasMentioned?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type PluginHookBeforeDispatchEvent = {
+  content: string;
+  body?: string;
+  channel?: string;
+  sessionKey?: string;
+  senderId?: string;
   isGroup?: boolean;
-  groupId?: string;
+  timestamp?: number;
+};
+
+export type PluginHookBeforeDispatchContext = {
+  channelId?: string;
+  accountId?: string;
+  conversationId?: string;
+  sessionKey?: string;
+  senderId?: string;
+};
+
+export type PluginHookBeforeMessageWriteEvent = {
+  message: unknown;
+  sessionKey?: string;
+  agentId?: string;
 };
 
 // -- Tool Hooks --
@@ -158,6 +248,58 @@ export type PluginHookSessionContext = {
   sessionKey?: string;
 };
 
+// -- Subagent Hooks --
+
+export type PluginHookSubagentContext = {
+  runId?: string;
+  childSessionKey?: string;
+  requesterSessionKey?: string;
+};
+
+export type PluginHookSubagentSpawningEvent = {
+  childSessionKey: string;
+  agentId: string;
+  label?: string;
+  mode: "run" | "session";
+  requester?: {
+    channel?: string;
+    accountId?: string;
+    to?: string;
+    threadId?: string | number;
+  };
+  threadRequested: boolean;
+};
+
+export type PluginHookSubagentDeliveryTargetEvent = {
+  childSessionKey: string;
+  requesterSessionKey: string;
+  requesterOrigin?: {
+    channel?: string;
+    accountId?: string;
+    to?: string;
+    threadId?: string | number;
+  };
+  childRunId?: string;
+  spawnMode?: "run" | "session";
+  expectsCompletionMessage: boolean;
+};
+
+export type PluginHookSubagentSpawnedEvent = PluginHookSubagentSpawningEvent & {
+  runId: string;
+};
+
+export type PluginHookSubagentEndedEvent = {
+  targetSessionKey: string;
+  targetKind: string;
+  reason: string;
+  sendFarewell?: boolean;
+  accountId?: string;
+  runId?: string;
+  endedAt?: number;
+  outcome?: "ok" | "error" | "timeout" | "killed" | "reset" | "deleted";
+  error?: string;
+};
+
 // -- Gateway Hooks --
 
 export type PluginHookGatewayStartEvent = {
@@ -177,6 +319,14 @@ export type PluginHookGatewayContext = {
 // =============================================================================
 
 type PluginHookHandlerMap = {
+  before_model_resolve: (
+    event: PluginHookBeforeModelResolveEvent,
+    ctx: PluginHookAgentContext,
+  ) => Promise<void> | void;
+  before_prompt_build: (
+    event: PluginHookBeforePromptBuildEvent,
+    ctx: PluginHookAgentContext,
+  ) => Promise<void> | void;
   before_agent_start: (
     event: PluginHookBeforeAgentStartEvent,
     ctx: PluginHookAgentContext,
@@ -193,6 +343,26 @@ type PluginHookHandlerMap = {
     event: PluginHookAfterCompactionEvent,
     ctx: PluginHookAgentContext,
   ) => Promise<void> | void;
+  before_reset: (
+    event: PluginHookBeforeResetEvent,
+    ctx: PluginHookAgentContext,
+  ) => Promise<void> | void;
+  llm_input: (
+    event: PluginHookLlmInputEvent,
+    ctx: PluginHookAgentContext,
+  ) => Promise<void> | void;
+  llm_output: (
+    event: PluginHookLlmOutputEvent,
+    ctx: PluginHookAgentContext,
+  ) => Promise<void> | void;
+  inbound_claim: (
+    event: PluginHookInboundClaimEvent,
+    ctx: PluginHookInboundClaimContext,
+  ) => Promise<void> | void;
+  before_dispatch: (
+    event: PluginHookBeforeDispatchEvent,
+    ctx: PluginHookBeforeDispatchContext,
+  ) => Promise<void> | void;
   message_received: (
     event: PluginHookMessageReceivedEvent,
     ctx: PluginHookMessageContext,
@@ -205,6 +375,10 @@ type PluginHookHandlerMap = {
     event: PluginHookMessageSentEvent,
     ctx: PluginHookMessageContext,
   ) => Promise<void> | void;
+  before_message_write: (
+    event: PluginHookBeforeMessageWriteEvent,
+    ctx: { agentId?: string; sessionKey?: string },
+  ) => Promise<void> | void;
   before_tool_call: (
     event: PluginHookBeforeToolCallEvent,
     ctx: PluginHookToolContext,
@@ -216,7 +390,7 @@ type PluginHookHandlerMap = {
   tool_result_persist: (
     event: PluginHookToolResultPersistEvent,
     ctx: PluginHookToolResultPersistContext,
-  ) => void;
+  ) => Promise<void> | void;
   session_start: (
     event: PluginHookSessionStartEvent,
     ctx: PluginHookSessionContext,
@@ -224,6 +398,22 @@ type PluginHookHandlerMap = {
   session_end: (
     event: PluginHookSessionEndEvent,
     ctx: PluginHookSessionContext,
+  ) => Promise<void> | void;
+  subagent_spawning: (
+    event: PluginHookSubagentSpawningEvent,
+    ctx: PluginHookSubagentContext,
+  ) => Promise<void> | void;
+  subagent_delivery_target: (
+    event: PluginHookSubagentDeliveryTargetEvent,
+    ctx: PluginHookSubagentContext,
+  ) => Promise<void> | void;
+  subagent_spawned: (
+    event: PluginHookSubagentSpawnedEvent,
+    ctx: PluginHookSubagentContext,
+  ) => Promise<void> | void;
+  subagent_ended: (
+    event: PluginHookSubagentEndedEvent,
+    ctx: PluginHookSubagentContext,
   ) => Promise<void> | void;
   gateway_start: (
     event: PluginHookGatewayStartEvent,
@@ -267,4 +457,16 @@ export type FlussHookConfig = {
   bucketCount: number;
   maxRetries: number;
   retryBackoffMs: number;
+  outputMode: "fluss" | "console" | "memory";
+};
+
+export type FlussHookPlugin = {
+  id: string;
+  name: string;
+  description: string;
+  register: (api: OpenClawPluginApi) => void;
+  /** Only present for testing. A RecordingSink that records all writes. */
+  __recordingSink?: import("./sink.js").RecordingSink;
+  /** Flush helper exposed for testing. */
+  __testBuffer?: { flushAll: () => Promise<void> };
 };

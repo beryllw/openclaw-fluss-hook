@@ -8,18 +8,30 @@ import type {
 } from "../src/types.js";
 
 const ALL_HOOK_NAMES: PluginHookName[] = [
+  "before_model_resolve",
+  "before_prompt_build",
   "before_agent_start",
   "agent_end",
   "before_compaction",
   "after_compaction",
+  "before_reset",
+  "llm_input",
+  "llm_output",
+  "inbound_claim",
+  "before_dispatch",
   "message_received",
   "message_sending",
   "message_sent",
+  "before_message_write",
   "before_tool_call",
   "after_tool_call",
   "tool_result_persist",
   "session_start",
   "session_end",
+  "subagent_spawning",
+  "subagent_delivery_target",
+  "subagent_spawned",
+  "subagent_ended",
   "gateway_start",
   "gateway_stop",
 ];
@@ -59,10 +71,10 @@ describe("plugin register & hook registration", () => {
     };
   });
 
-  it("registers all 14 hooks", () => {
+  it("registers all 26 hooks", () => {
     plugin.register(api);
 
-    expect(api.on).toHaveBeenCalledTimes(14);
+    expect(api.on).toHaveBeenCalledTimes(26);
     for (const hookName of ALL_HOOK_NAMES) {
       expect(api.on).toHaveBeenCalledWith(hookName, expect.any(Function));
       expect(handlers).toHaveProperty(hookName);
@@ -82,6 +94,13 @@ describe("plugin register & hook registration", () => {
   it("all hook handlers do not throw", () => {
     plugin.register(api);
 
+    // New agent hooks
+    expect(() => handlers.before_model_resolve({ prompt: "test" }, {})).not.toThrow();
+    expect(() => handlers.before_prompt_build({ prompt: "test" }, {})).not.toThrow();
+    expect(() => handlers.before_reset({}, {})).not.toThrow();
+    expect(() => handlers.llm_input({ runId: "", sessionId: "", provider: "", model: "", prompt: "", historyMessages: [], imagesCount: 0 }, {})).not.toThrow();
+    expect(() => handlers.llm_output({ runId: "", sessionId: "", provider: "", model: "", assistantTexts: [] }, {})).not.toThrow();
+
     // Agent hooks
     expect(() => handlers.before_agent_start({ prompt: "test" }, {})).not.toThrow();
     expect(() => handlers.agent_end({ messages: [], success: true }, {})).not.toThrow();
@@ -89,9 +108,12 @@ describe("plugin register & hook registration", () => {
     expect(() => handlers.after_compaction({ messageCount: 1, compactedCount: 0 }, {})).not.toThrow();
 
     // Message hooks
+    expect(() => handlers.inbound_claim({ content: "hi", channel: "web", isGroup: false }, { channelId: "c1" })).not.toThrow();
+    expect(() => handlers.before_dispatch({ content: "hi" }, { channelId: "c1" })).not.toThrow();
     expect(() => handlers.message_received({ from: "u1", content: "hi" }, { channelId: "c1" })).not.toThrow();
     expect(() => handlers.message_sending({ to: "u1", content: "hi" }, { channelId: "c1" })).not.toThrow();
     expect(() => handlers.message_sent({ to: "u1", content: "hi", success: true }, { channelId: "c1" })).not.toThrow();
+    expect(() => handlers.before_message_write({ message: "m" }, {})).not.toThrow();
 
     // Tool hooks
     expect(() => handlers.before_tool_call({ toolName: "t", params: {} }, { toolName: "t" })).not.toThrow();
@@ -102,6 +124,12 @@ describe("plugin register & hook registration", () => {
     expect(() => handlers.session_start({ sessionId: "s1" }, { sessionId: "s1" })).not.toThrow();
     expect(() => handlers.session_end({ sessionId: "s1", messageCount: 1 }, { sessionId: "s1" })).not.toThrow();
 
+    // Subagent hooks
+    expect(() => handlers.subagent_spawning({ childSessionKey: "sk", agentId: "a", mode: "run", threadRequested: false }, {})).not.toThrow();
+    expect(() => handlers.subagent_delivery_target({ childSessionKey: "sk", requesterSessionKey: "r", expectsCompletionMessage: false }, {})).not.toThrow();
+    expect(() => handlers.subagent_spawned({ childSessionKey: "sk", agentId: "a", mode: "run", threadRequested: false, runId: "r" }, {})).not.toThrow();
+    expect(() => handlers.subagent_ended({ targetSessionKey: "t", targetKind: "subagent", reason: "done" }, {})).not.toThrow();
+
     // Gateway hooks
     expect(() => handlers.gateway_start({ port: 3000 }, {})).not.toThrow();
     expect(() => handlers.gateway_stop({}, {})).not.toThrow();
@@ -110,6 +138,6 @@ describe("plugin register & hook registration", () => {
   it("logs plugin registered message", () => {
     plugin.register(api);
 
-    expect(logger.info).toHaveBeenCalledWith("[fluss-hook] Plugin registered (14 hooks)");
+    expect(logger.info).toHaveBeenCalledWith("[fluss-hook] Plugin registered (26 hooks, output=fluss)");
   });
 });

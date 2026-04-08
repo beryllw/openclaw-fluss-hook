@@ -10,6 +10,7 @@ const DEFAULTS: FlussHookConfig = {
   bucketCount: 4,
   maxRetries: 3,
   retryBackoffMs: 500,
+  outputMode: "fluss",
 };
 
 function envString(key: string): string | undefined {
@@ -95,6 +96,11 @@ export function resolveConfig(
       asInt(cfg.retryBackoffMs) ??
       envInt("FLUSS_RETRY_BACKOFF_MS") ??
       DEFAULTS.retryBackoffMs,
+
+    outputMode:
+      asString(cfg.outputMode) ??
+      envString("FLUSS_OUTPUT_MODE") ??
+      DEFAULTS.outputMode,
   };
 }
 
