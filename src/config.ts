@@ -4,10 +4,12 @@ const DEFAULTS: FlussHookConfig = {
   gatewayUrl: "http://localhost:8080",
   databaseName: "openclaw",
   tablePrefix: "hook_",
-  batchSize: 50,
+  batchSize: 10,
   flushIntervalMs: 5000,
   autoCreateTable: true,
   bucketCount: 4,
+  maxRetries: 3,
+  retryBackoffMs: 500,
 };
 
 function envString(key: string): string | undefined {
@@ -83,6 +85,16 @@ export function resolveConfig(
       asInt(cfg.bucketCount) ??
       envInt("FLUSS_BUCKET_COUNT") ??
       DEFAULTS.bucketCount,
+
+    maxRetries:
+      asInt(cfg.maxRetries) ??
+      envInt("FLUSS_MAX_RETRIES") ??
+      DEFAULTS.maxRetries,
+
+    retryBackoffMs:
+      asInt(cfg.retryBackoffMs) ??
+      envInt("FLUSS_RETRY_BACKOFF_MS") ??
+      DEFAULTS.retryBackoffMs,
   };
 }
 

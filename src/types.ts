@@ -265,4 +265,6 @@ export type FlussHookConfig = {
   flushIntervalMs: number;
   autoCreateTable: boolean;
   bucketCount: number;
+  maxRetries: number;
+  retryBackoffMs: number;
 };

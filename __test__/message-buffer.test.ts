@@ -29,6 +29,8 @@ function createConfig(overrides?: Partial<FlussHookConfig>): FlussHookConfig {
     flushIntervalMs: 1000,
     autoCreateTable: true,
     bucketCount: 4,
+    maxRetries: 3,
+    retryBackoffMs: 500,
     ...overrides,
   };
 }

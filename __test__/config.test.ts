@@ -21,10 +21,12 @@ describe("resolveConfig", () => {
       gatewayPassword: undefined,
       databaseName: "openclaw",
       tablePrefix: "hook_",
-      batchSize: 50,
+      batchSize: 10,
       flushIntervalMs: 5000,
       autoCreateTable: true,
       bucketCount: 4,
+      maxRetries: 3,
+      retryBackoffMs: 500,
     });
   });
 
@@ -68,7 +70,7 @@ describe("resolveConfig", () => {
 
     const config = resolveConfig();
 
-    expect(config.batchSize).toBe(50);
+    expect(config.batchSize).toBe(10);
     expect(config.autoCreateTable).toBe(true);
     expect(config.gatewayUrl).toBe("http://localhost:8080");
   });
@@ -81,7 +83,7 @@ describe("resolveConfig", () => {
     });
 
     expect(config.gatewayUrl).toBe("http://localhost:8080");
-    expect(config.batchSize).toBe(50);
+    expect(config.batchSize).toBe(10);
     expect(config.autoCreateTable).toBe(true);
   });
 
