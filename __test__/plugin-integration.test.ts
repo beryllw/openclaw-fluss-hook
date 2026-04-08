@@ -748,8 +748,8 @@ describe("all 26 hooks through plugin lifecycle", () => {
       registerService: vi.fn(),
     };
     plugin.register(api2);
-    const h = (api2.on as ReturnType<typeof vi.fn>).mock.calls.reduce(
-      (acc: Record<string, Function>, [name, handler]: [string, Function]) => { acc[name] = handler; return acc; }, {}
+    const h = (api2.on as ReturnType<typeof vi.fn>).mock.calls.reduce<Record<string, Function>>(
+      (acc, [name, handler]) => { acc[name] = handler; return acc; }, {}
     );
 
     expect(() => h.before_model_resolve({ prompt: "p" }, {})).not.toThrow();
@@ -871,13 +871,13 @@ describe("RecordingSink", () => {
     expect(sink.getEventCount()).toBe(3);
     expect(sink.getEvents("agent_end")).toHaveLength(2);
     expect(sink.getEvents("session_start")).toHaveLength(1);
-    expect(sink.getEvents("nonexistent")).toHaveLength(0);
+    expect(sink.getEvents("nonexistent" as PluginHookName)).toHaveLength(0);
   });
 
   it("getEvents without hookName returns all events", async () => {
     const sink = new RecordingSink(noOpSink);
-    await sink.appendBatch("a", [{ x: 1 }]);
-    await sink.appendBatch("b", [{ y: 2 }]);
+    await sink.appendBatch("a" as PluginHookName, [{ x: 1 }]);
+    await sink.appendBatch("b" as PluginHookName, [{ y: 2 }]);
 
     const all = sink.getEvents();
     expect(all).toHaveLength(2);
@@ -885,7 +885,7 @@ describe("RecordingSink", () => {
 
   it("clear removes all events", async () => {
     const sink = new RecordingSink(noOpSink);
-    await sink.appendBatch("a", [{ x: 1 }]);
+    await sink.appendBatch("a" as PluginHookName, [{ x: 1 }]);
     sink.clear();
     expect(sink.getEventCount()).toBe(0);
     expect(sink.getEvents()).toHaveLength(0);
@@ -914,7 +914,7 @@ describe("RecordingSink", () => {
       close: () => {},
     };
     const sink = new RecordingSink(delegate);
-    await sink.appendBatch("test", [{ a: 1 }]);
+    await sink.appendBatch("test" as PluginHookName, [{ a: 1 }]);
 
     expect(delegateCalls).toHaveLength(1);
     expect(delegateCalls[0].hookName).toBe("test");

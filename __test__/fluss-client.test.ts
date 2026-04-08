@@ -22,6 +22,7 @@ function createConfig(overrides?: Partial<FlussHookConfig>): FlussHookConfig {
     bucketCount: 4,
     maxRetries: 3,
     retryBackoffMs: 10, // fast backoff for tests
+    outputMode: "memory" as const,
     ...overrides,
   };
 }

@@ -98,8 +98,8 @@ export function resolveConfig(
       DEFAULTS.retryBackoffMs,
 
     outputMode:
-      asString(cfg.outputMode) ??
-      envString("FLUSS_OUTPUT_MODE") ??
+      (asString(cfg.outputMode) as "fluss" | "console" | "memory" | undefined) ??
+      (envString("FLUSS_OUTPUT_MODE") as "fluss" | "console" | "memory" | undefined) ??
       DEFAULTS.outputMode,
   };
 }
