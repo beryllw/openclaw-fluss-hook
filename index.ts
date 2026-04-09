@@ -205,4 +205,9 @@ const plugin: FlussHookPlugin = {
   },
 };
 
+/** Test-only: reset registration guard so each test starts fresh. */
+export function __testResetRegistered(): void {
+  registered = false;
+}
+
 export default plugin;
