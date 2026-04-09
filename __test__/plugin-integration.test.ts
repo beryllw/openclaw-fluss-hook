@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import plugin, { __testResetRegistered } from "../index.js";
+import plugin, { __testResetSingleton } from "../index.js";
 import { RecordingSink, type EventSink } from "../src/sink.js";
 import { MultiTableBuffer } from "../src/message-buffer.js";
 import type {
@@ -82,7 +82,7 @@ describe("plugin registration", () => {
   let api: OpenClawPluginApi;
 
   beforeEach(() => {
-    __testResetRegistered();
+    __testResetSingleton();
     handlers = {};
     services = [];
     logger = createLogger();
@@ -140,7 +140,7 @@ describe("hook event capture through plugin", () => {
   let api: OpenClawPluginApi;
 
   beforeEach(() => {
-    __testResetRegistered();
+    __testResetSingleton();
     handlers = {};
     services = [];
     logger = createLogger();
@@ -668,7 +668,7 @@ describe("all 26 hooks through plugin lifecycle", () => {
   let api: OpenClawPluginApi;
 
   beforeEach(() => {
-    __testResetRegistered();
+    __testResetSingleton();
     handlers = {};
     services = [];
     logger = createLogger();
@@ -744,7 +744,7 @@ describe("all 26 hooks through plugin lifecycle", () => {
   });
 
   it("all 26 hook handlers are safe (do not throw)", () => {
-    __testResetRegistered();
+    __testResetSingleton();
     const api2 = {
       pluginConfig: testConfig,
       logger: createLogger(),

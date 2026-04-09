@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
-import plugin, { __testResetRegistered } from "../index.js";
+import plugin, { __testResetSingleton } from "../index.js";
 import type {
   OpenClawPluginApi,
   PluginLogger,
@@ -112,7 +112,7 @@ describe("fluss-hook plugin end-to-end (multi-table)", () => {
   let logger: PluginLogger;
 
   beforeEach(() => {
-    __testResetRegistered();
+    __testResetSingleton();
     gatewayOps.dbCreated = false;
     gatewayOps.tablesCreated.clear();
     gatewayOps.appendedRows.clear();

@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "./src/types.js";
+import type { FlussHookPlugin, OpenClawPluginApi } from "./src/types.js";
 import { resolveConfig } from "./src/config.js";
 import { GatewayClient } from "./src/fluss-client.js";
 import { MultiTableBuffer } from "./src/message-buffer.js";
@@ -32,12 +32,54 @@ import {
   mapGatewayStop,
 } from "./src/event-mappers.js";
 
-import type { FlussHookPlugin } from "./src/types.js";
-
+// ── Module-level singleton state ──────────────────────────────────────
 // OpenClaw 在启动过程中可能多次调用 register()（如 reloadDeferredGatewayPlugins 与首次加载
-// 的 cache key 不一致时会绕过缓存，导致重复执行 register）。加模块级守卫避免重复创建 buffer
-// 和注册 handler。
-let registered = false;
+// 的 cache key 不一致时会绕过缓存）。所有 register() 调用共享同一个 buffer/sink，确保：
+// 1. 每次注册都能在新 registry 中安装 handlers（避免 global hook runner 被替换后 handlers 丢失）
+// 2. 不会重复创建 buffer / GatewayClient / timer
+// 3. 服务只启动一次
+
+let singletonBuffer: MultiTableBuffer | null = null;
+let singletonSink: EventSink | null = null;
+let singletonRecordingSink: RecordingSink | null = null;
+let singletonServiceRegistered = false;
+
+function ensureSingleton(config: ReturnType<typeof resolveConfig>, logger: OpenClawPluginApi["logger"]): MultiTableBuffer {
+  if (singletonBuffer) return singletonBuffer;
+
+  let sink: EventSink;
+  let recordingSink: RecordingSink | undefined;
+
+  if (config.outputMode === "console") {
+    const consoleSink = new ConsoleSink();
+    recordingSink = new RecordingSink(consoleSink);
+    sink = recordingSink;
+  } else if (config.outputMode === "memory") {
+    const noOpSink: EventSink = {
+      appendBatch: () => Promise.resolve(),
+      close: () => {},
+    };
+    recordingSink = new RecordingSink(noOpSink);
+    sink = recordingSink;
+  } else {
+    sink = new GatewayClient(config, logger);
+  }
+
+  singletonSink = sink;
+  singletonRecordingSink = recordingSink ?? null;
+  singletonBuffer = new MultiTableBuffer(sink, config, logger);
+  return singletonBuffer;
+}
+
+/** Test-only: reset singleton state so each test starts fresh. */
+export function __testResetSingleton(): void {
+  singletonBuffer = null;
+  singletonSink = null;
+  singletonRecordingSink = null;
+  singletonServiceRegistered = false;
+}
+
+// ── Plugin definition ─────────────────────────────────────────────────
 
 const plugin: FlussHookPlugin = {
   id: "fluss-hook",
@@ -45,38 +87,14 @@ const plugin: FlussHookPlugin = {
   description: "Log all OpenClaw hook events to Apache Fluss for real-time analytics",
 
   register(api: OpenClawPluginApi) {
-    if (registered) {
-      api.logger.info("[fluss-hook] already registered, skipping duplicate registration");
-      return;
-    }
-    registered = true;
-
     const config = resolveConfig(api.pluginConfig);
+    const buffer = ensureSingleton(config, api.logger);
 
-    let sink: EventSink;
-    let recordingSink: RecordingSink | undefined;
-
-    if (config.outputMode === "console") {
-      // Prints events to stdout for local debugging, also records them
-      const consoleSink = new ConsoleSink();
-      recordingSink = new RecordingSink(consoleSink);
-      plugin.__recordingSink = recordingSink;
-      sink = recordingSink;
-    } else if (config.outputMode === "memory") {
-      // Test-only mode: records events without writing anywhere
-      const noOpSink: EventSink = {
-        appendBatch: () => Promise.resolve(),
-        close: () => {},
-      };
-      recordingSink = new RecordingSink(noOpSink);
-      plugin.__recordingSink = recordingSink;
-      sink = recordingSink;
-    } else {
-      sink = new GatewayClient(config, api.logger);
-    }
-
-    const buffer = new MultiTableBuffer(sink, config, api.logger);
+    // Expose for testing
     plugin.__testBuffer = { flushAll: () => buffer.flushAll() };
+    if (singletonRecordingSink) {
+      plugin.__recordingSink = singletonRecordingSink;
+    }
 
     // -- Agent Hooks --
     api.on("before_model_resolve", (event, ctx) => {
@@ -188,26 +206,25 @@ const plugin: FlussHookPlugin = {
       buffer.push("gateway_stop", mapGatewayStop(event, ctx));
     });
 
-    api.registerService({
-      id: "fluss-hook",
-      start: async () => {
-        if (config.outputMode === "fluss") {
-          await (sink as GatewayClient).ensureDatabase();
-        }
-        buffer.start();
-      },
-      stop: async () => {
-        await buffer.stop();
-      },
-    });
+    // Only register service once — OpenClaw rejects duplicate service IDs
+    if (!singletonServiceRegistered) {
+      singletonServiceRegistered = true;
+      api.registerService({
+        id: "fluss-hook",
+        start: async () => {
+          if (config.outputMode === "fluss") {
+            await (singletonSink as GatewayClient).ensureDatabase();
+          }
+          singletonBuffer!.start();
+        },
+        stop: async () => {
+          await singletonBuffer!.stop();
+        },
+      });
+    }
 
     api.logger.info(`[fluss-hook] Plugin registered (26 hooks, output=${config.outputMode})`);
   },
 };
-
-/** Test-only: reset registration guard so each test starts fresh. */
-export function __testResetRegistered(): void {
-  registered = false;
-}
 
 export default plugin;

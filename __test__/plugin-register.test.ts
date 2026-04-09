@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import plugin, { __testResetRegistered } from "../index.js";
+import plugin, { __testResetSingleton } from "../index.js";
 import type {
   OpenClawPluginApi,
   PluginLogger,
@@ -43,7 +43,7 @@ describe("plugin register & hook registration", () => {
   let api: OpenClawPluginApi;
 
   beforeEach(() => {
-    __testResetRegistered();
+    __testResetSingleton();
     handlers = {};
     services = [];
     logger = {
