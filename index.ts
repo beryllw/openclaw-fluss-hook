@@ -34,12 +34,23 @@ import {
 
 import type { FlussHookPlugin } from "./src/types.js";
 
+// OpenClaw 在启动过程中可能多次调用 register()（如 reloadDeferredGatewayPlugins 与首次加载
+// 的 cache key 不一致时会绕过缓存，导致重复执行 register）。加模块级守卫避免重复创建 buffer
+// 和注册 handler。
+let registered = false;
+
 const plugin: FlussHookPlugin = {
   id: "fluss-hook",
   name: "Fluss Hook Event Logger",
   description: "Log all OpenClaw hook events to Apache Fluss for real-time analytics",
 
   register(api: OpenClawPluginApi) {
+    if (registered) {
+      api.logger.info("[fluss-hook] already registered, skipping duplicate registration");
+      return;
+    }
+    registered = true;
+
     const config = resolveConfig(api.pluginConfig);
 
     let sink: EventSink;
