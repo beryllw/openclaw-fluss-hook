@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/fluss-hook",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "OpenClaw plugin to log all messages to Apache Fluss via fluss-gateway REST API",
   "type": "module",
   "devDependencies": {
