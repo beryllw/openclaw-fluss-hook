@@ -45,6 +45,4 @@ temp/
 demo/flink-lib/*.jar
 !demo/flink-lib/.gitkeep
 
-# Compiled fluss-node native addons (extracted from zip, not tracked)
-fluss-node-lib/linux-x64-gnu/
-fluss-node-lib/darwin-arm64/
+

@@ -412,16 +412,11 @@ GROUP BY agent_id;
 
 See [demo/scripts/demo.sql](demo/scripts/demo.sql) for the full set of queries covering all 14 tables.
 
-## Deployment Scenarios
+## Demo
 
-| Scenario | Directories | Description |
-|----------|-------------|-------------|
-| **Demo** (full Docker stack) | [`demo/`](demo/) | ZooKeeper + Fluss + Flink + OpenClaw all-in-one Docker Compose |
-| **Plugin install** (existing OpenClaw) | [`deploy/`](deploy/) + `scripts/install.sh` | Deploy standalone Fluss cluster + Gateway, install fluss-hook to existing OpenClaw |
-| **Docker OpenClaw** + Fluss cluster | [`deploy/`](deploy/) + [`deploy-openclaw/`](deploy-openclaw/) | Separate Fluss cluster + Gateway and Docker-based OpenClaw |
-| **Local OpenClaw** (no Docker) | [`deploy/`](deploy/) + [`deploy-local/`](deploy-local/) | Non-Docker OpenClaw install with plugins on Linux server |
+Full Docker Compose stack with ZooKeeper + Fluss + Flink + OpenClaw all-in-one. See [`demo/`](demo/) for details.
 
-### Quick Start: Demo
+### Quick Start
 
 ```bash
 cd demo
@@ -469,18 +464,13 @@ npm run test:watch
 │   ├── fluss-client.ts       # GatewayClient — REST API client for Fluss Gateway
 │   ├── message-buffer.ts     # MultiTableBuffer — per-table batch + periodic flush
 │   ├── schema.ts             # 14 table schemas + registry
+│   ├── sink.ts               # Sink orchestration
 │   └── types.ts              # Type definitions (14 hook event types, config)
 ├── scripts/
 │   ├── install.sh            # Plugin installer
-│   └── release-install.sh    # Self-contained installer (bundled in release package)
+│   └── package-release.sh    # Release packaging script
 ├── __test__/                 # Vitest test suite
-│   ├── integration.test.ts   # Docker-based integration tests (Gateway + Fluss cluster)
-│   ├── plugin-e2e.test.ts    # End-to-end plugin tests with fetch mock
-│   └── ...
-├── demo/                     # Full Docker Compose demo
-├── deploy/                   # Standalone Fluss + Flink + Gateway cluster
-├── deploy-openclaw/          # Docker OpenClaw deployment
-├── deploy-local/             # Non-Docker local OpenClaw deployment
+├── demo/                     # Full Docker Compose demo (Fluss + Flink + OpenClaw)
 ├── docker-compose.integration.yml  # Integration test infrastructure
 ├── openclaw.plugin.json      # Plugin manifest with config schema
 ├── package.json

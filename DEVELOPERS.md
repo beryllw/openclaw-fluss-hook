@@ -10,6 +10,7 @@ openclaw-fluss-hook/
 │   ├── fluss-client.ts           # Fluss Gateway REST API 客户端
 │   ├── message-buffer.ts         # 多表批量缓冲写入
 │   ├── schema.ts                 # 14 张表 schema 定义
+│   ├── sink.ts                   # Sink 编排
 │   └── types.ts                  # 类型定义（对齐 openclaw）
 ├── __test__/                     # 测试
 │   ├── config.test.ts
@@ -18,22 +19,22 @@ openclaw-fluss-hook/
 │   ├── plugin-e2e.test.ts
 │   ├── plugin-register.test.ts
 │   └── integration.test.ts       # 需要 Docker + podman compose
-├── demo/                         # 本地开发演示（全栈：Fluss + Flink + OpenClaw）
+├── demo/                         # 全栈演示（Fluss + Flink + OpenClaw Docker Compose）
 │   ├── docker-compose.yml
 │   ├── Dockerfile.openclaw
 │   ├── config/openclaw.json
-│   ├── scripts/                  # SQL 示例和构建脚本
-│   └── server-deploy/            # 服务器部署版（network_mode: host）
-├── deploy-local/                 # 仅 OpenClaw 本地测试
+│   └── scripts/                  # SQL 示例和构建脚本
 ├── docs/                         # 文档
-│   ├── plugin-hook-events.md     # 14 种 Hook 事件详解
-│   └── blog.md
+│   └── plugin-hook-events.md     # 14 种 Hook 事件详解
 ├── scripts/
 │   ├── install.sh                # 安装脚本
 │   └── package-release.sh        # 发布打包脚本
 ├── index.ts                      # 插件入口
 ├── openclaw.plugin.json          # OpenClaw 插件清单
-└── .github/workflows/ci-release.yml  # CI/CD
+├── docker-compose.integration.yml # 集成测试基础设施
+└── .github/workflows/
+    ├── ci.yml                    # CI
+    └── release.yml               # Release 打包上传
 ```
 
 ---
@@ -180,38 +181,7 @@ open http://localhost:8083
 docker compose down
 ```
 
-### 服务器部署版
-
-包含 Fluss + Flink，使用 `network_mode: host`，适合生产服务器。
-
-```bash
-cd demo/server-deploy
-
-# 1. 配置
-cp .env.example .env
-# 编辑 .env，设置 HOST_IP
-
-# 2. 准备 JAR
-./scripts/setup.sh
-
-# 3. 启动
-docker compose up -d
-```
-
-### 仅 OpenClaw 测试
-
-只启动 OpenClaw，连接外部 Fluss 集群。
-
-```bash
-cd deploy-local
-
-# 1. 配置
-cp .env.example .env
-# 编辑 .env，设置 BAILIAN_API_KEY 等
-
-# 2. 启动
-docker compose up -d
-```
+详见 [demo/README.md](demo/README.md)。
 
 ---
 

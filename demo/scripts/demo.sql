@@ -618,3 +618,573 @@ FROM hook_tool_result_persist
 --     Increase max-column-width to see full messages array without truncation.
 -- SET 'sql-client.display.max-column-width' = '2000';
 -- SELECT * FROM hook_agent_end /*+ OPTIONS('scan.startup.mode'='earliest') */ LIMIT 1;
+
+-- ============================================================
+-- 10. Risk Control: Interactive Queries
+-- ============================================================
+-- AI Agent real-time risk control SQL rules.
+-- Prerequisites:
+--   1. Send messages via OpenClaw WebChat to trigger table auto-creation
+--   2. Catalog initialization from Section 1 above is already done
+
+-- ── 10a. Monitor all command executions ──────────────────────
+-- Extract command field from params JSON
+-- OpenClaw exec tool: params structure {"command":"ls -la"}
+
+SELECT tool_name,
+       JSON_VALUE(params, '$.command') AS command,
+       agent_id,
+       session_key,
+       `timestamp`
+FROM hook_before_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+WHERE tool_name = 'exec';
+
+-- ── 10b. Dangerous command pattern matching with risk levels ─
+-- Match commands against predefined danger patterns.
+-- Risk levels:
+--   HIGH   - filesystem destruction, privilege escalation, disk destruction
+--   MEDIUM - remote download-execute, sensitive file access, env leak
+
+SELECT agent_id,
+       session_key,
+       command,
+       risk_level,
+       risk_type,
+       `timestamp`
+FROM (
+  SELECT agent_id,
+         session_key,
+         JSON_VALUE(params, '$.command') AS command,
+         `timestamp`,
+         CASE
+           -- HIGH: filesystem destruction
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -rf%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -r /%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rmdir /%'
+             THEN 'HIGH'
+           -- HIGH: privilege escalation
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%sudo %'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chmod 777%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chown root%'
+             THEN 'HIGH'
+           -- HIGH: disk/system destruction
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%mkfs%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%dd if=%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%> /dev/sd%'
+             THEN 'HIGH'
+           -- MEDIUM: remote download-execute
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%sh%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%bash%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%sh%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%bash%'
+             THEN 'MEDIUM'
+           -- MEDIUM: sensitive file access
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/passwd%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/shadow%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/id_rsa%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/authorized_keys%'
+             THEN 'MEDIUM'
+           -- MEDIUM: env leak
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%printenv%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%env | grep%'
+             THEN 'MEDIUM'
+           ELSE 'LOW'
+         END AS risk_level,
+         CASE
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -rf%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -r /%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rmdir /%'
+             THEN 'file_destruction'
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%sudo %'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chmod 777%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chown root%'
+             THEN 'privilege_escalation'
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%mkfs%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%dd if=%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%> /dev/sd%'
+             THEN 'system_destruction'
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%sh%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%bash%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%sh%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%bash%'
+             THEN 'remote_code_execution'
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/passwd%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/shadow%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/id_rsa%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/authorized_keys%'
+             THEN 'sensitive_file_access'
+           WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%printenv%'
+             OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%env | grep%'
+             THEN 'env_leak'
+           ELSE 'normal'
+         END AS risk_type
+  FROM hook_before_tool_call
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE tool_name = 'exec'
+) WHERE risk_level <> 'LOW';
+
+-- ── 10c. Full tool call audit view ──────────────────────────
+-- Beyond exec, write/read tools may also carry risk
+
+SELECT tool_name,
+       SUBSTRING(params, 1, 120) AS params_preview,
+       agent_id,
+       session_key,
+       `timestamp`
+FROM hook_before_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */;
+
+-- ── 10d. Tool call frequency by agent ───────────────────────
+-- Identify abnormally high-frequency agents
+
+SELECT agent_id,
+       COUNT(*) AS call_count,
+       COUNT(DISTINCT tool_name) AS tool_variety
+FROM hook_before_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+GROUP BY agent_id
+HAVING COUNT(*) > 50;
+
+-- ── 10e. Tool frequency by type ─────────────────────────────
+
+SELECT agent_id,
+       tool_name,
+       COUNT(*) AS call_count
+FROM hook_before_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+GROUP BY agent_id, tool_name
+HAVING COUNT(*) > 20;
+
+-- ── 10f. Error rate anomaly detection ───────────────────────
+-- Alert when error rate > 50% and total calls > 5
+
+SELECT agent_id,
+       COUNT(*) AS total_calls,
+       SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) AS failed_calls,
+       SUM(CASE WHEN error = '' THEN 1 ELSE 0 END) AS success_calls,
+       CAST(SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) AS DOUBLE)
+         / COUNT(*) * 100 AS error_rate_pct
+FROM hook_after_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+GROUP BY agent_id
+HAVING SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) * 100 / COUNT(*) > 50
+   AND COUNT(*) > 5;
+
+-- ── 10g. Slow call alerts ───────────────────────────────────
+-- Tool execution time > 30 seconds
+
+SELECT tool_name,
+       duration_ms,
+       JSON_VALUE(params, '$.command') AS command,
+       error,
+       agent_id,
+       `timestamp`
+FROM hook_after_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+WHERE duration_ms > 30000;
+
+-- ── 10h. Agent health dashboard ─────────────────────────────
+
+SELECT agent_id,
+       COUNT(*) AS total_calls,
+       SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) AS error_count,
+       CAST(AVG(duration_ms) AS BIGINT) AS avg_duration_ms,
+       MAX(duration_ms) AS max_duration_ms,
+       MIN(`timestamp`) AS first_call_ts,
+       MAX(`timestamp`) AS last_call_ts,
+       CASE
+         WHEN SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) * 100 / COUNT(*) > 50
+           THEN 'UNHEALTHY'
+         WHEN SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END) * 100 / COUNT(*) > 20
+           THEN 'WARNING'
+         ELSE 'HEALTHY'
+       END AS health_status
+FROM hook_after_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+GROUP BY agent_id;
+
+-- ── 10i. Agent success rate by provider ─────────────────────
+
+SELECT agent_id,
+       message_provider,
+       COUNT(*) AS total_runs,
+       SUM(CASE WHEN success THEN 1 ELSE 0 END) AS succeeded,
+       SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) AS failed,
+       CAST(AVG(duration_ms) AS BIGINT) AS avg_duration_ms
+FROM hook_agent_end
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+GROUP BY agent_id, message_provider;
+
+-- ── 10j. User message sensitive info scan ───────────────────
+-- Match common key/password/connection-string/private-key patterns
+
+SELECT from_id,
+       channel_id,
+       conversation_id,
+       SUBSTRING(content, 1, 80) AS content_preview,
+       leak_type,
+       `timestamp`
+FROM (
+  SELECT from_id,
+         channel_id,
+         conversation_id,
+         content,
+         `timestamp`,
+         CASE
+           WHEN content LIKE '%AKIA%'
+             THEN 'aws_access_key'
+           WHEN content LIKE '%sk-proj-%'
+             OR content LIKE '%sk-live-%'
+             THEN 'openai_api_key'
+           WHEN content LIKE '%LTAI%'
+             THEN 'alicloud_access_key'
+           WHEN LOWER(content) LIKE '%mysql://%'
+             OR LOWER(content) LIKE '%postgres://%'
+             OR LOWER(content) LIKE '%mongodb://%'
+             OR LOWER(content) LIKE '%redis://%'
+             THEN 'database_credential'
+           WHEN content LIKE '%BEGIN RSA PRIVATE KEY%'
+             OR content LIKE '%BEGIN OPENSSH PRIVATE KEY%'
+             OR content LIKE '%BEGIN EC PRIVATE KEY%'
+             THEN 'private_key'
+           WHEN LOWER(content) LIKE '%password%=%'
+             OR LOWER(content) LIKE '%password%:%'
+             OR LOWER(content) LIKE '%api_key%=%'
+             OR LOWER(content) LIKE '%apikey%=%'
+             OR LOWER(content) LIKE '%secret_key%=%'
+             OR LOWER(content) LIKE '%access_token%=%'
+             THEN 'generic_credential'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_message_received
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+) WHERE leak_type <> 'none';
+
+-- ── 10k. Prompt injection detection ─────────────────────────
+-- Search raw messages JSON string for injection patterns
+
+SELECT agent_id,
+       session_key,
+       injection_type,
+       SUBSTRING(messages, 1, 100) AS msg_content_preview,
+       `timestamp`
+FROM (
+  SELECT agent_id,
+         session_key,
+         `timestamp`,
+         messages,
+         CASE
+           WHEN LOWER(messages) LIKE '%ignore previous instructions%'
+             THEN 'instruction_override_en'
+           WHEN messages LIKE '%忽略之前的指令%'
+             THEN 'instruction_override_zh'
+           WHEN LOWER(messages) LIKE '%you are now%'
+             THEN 'role_hijack'
+           WHEN LOWER(messages) LIKE '%system prompt%'
+             OR messages LIKE '%系统提示词%'
+             THEN 'prompt_extraction'
+           ELSE 'none'
+         END AS injection_type
+  FROM hook_before_agent_start
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+) WHERE injection_type <> 'none';
+
+-- ── 10l. Tool params sensitive info detection ───────────────
+
+SELECT tool_name,
+       agent_id,
+       session_key,
+       leak_type,
+       SUBSTRING(params, 1, 120) AS params_preview,
+       `timestamp`
+FROM (
+  SELECT tool_name,
+         agent_id,
+         session_key,
+         params,
+         `timestamp`,
+         CASE
+           WHEN params LIKE '%AKIA%'
+             THEN 'aws_key_in_params'
+           WHEN params LIKE '%sk-proj-%'
+             OR params LIKE '%sk-live-%'
+             THEN 'openai_key_in_params'
+           WHEN params LIKE '%BEGIN RSA PRIVATE KEY%'
+             OR params LIKE '%BEGIN OPENSSH PRIVATE KEY%'
+             THEN 'private_key_in_params'
+           WHEN LOWER(params) LIKE '%password%'
+             AND (tool_name = 'write' OR tool_name = 'read')
+             THEN 'password_in_file_op'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_before_tool_call
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE tool_name IN ('write', 'read', 'exec')
+) WHERE leak_type <> 'none';
+
+-- ── 10m. Unified alert view ─────────────────────────────────
+-- Merge three sensitive info detection sources into unified alert stream
+
+-- Source 1: User messages
+SELECT 'user_message' AS alert_source,
+       leak_type AS alert_type,
+       from_id AS entity_id,
+       SUBSTRING(content, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT from_id, content, `timestamp`,
+         CASE
+           WHEN content LIKE '%AKIA%' THEN 'aws_key'
+           WHEN content LIKE '%sk-proj-%' OR content LIKE '%sk-live-%' THEN 'openai_key'
+           WHEN content LIKE '%LTAI%' THEN 'alicloud_key'
+           WHEN content LIKE '%BEGIN RSA PRIVATE KEY%'
+             OR content LIKE '%BEGIN OPENSSH PRIVATE KEY%' THEN 'private_key'
+           WHEN LOWER(content) LIKE '%mysql://%'
+             OR LOWER(content) LIKE '%postgres://%' THEN 'db_credential'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_message_received
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+) WHERE leak_type <> 'none'
+
+UNION ALL
+
+-- Source 2: Prompt injection
+SELECT 'prompt_injection' AS alert_source,
+       injection_type AS alert_type,
+       agent_id AS entity_id,
+       SUBSTRING(messages, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT agent_id, messages, `timestamp`,
+         CASE
+           WHEN LOWER(messages) LIKE '%ignore previous instructions%'
+             THEN 'instruction_override'
+           WHEN messages LIKE '%忽略之前的指令%'
+             THEN 'instruction_override_zh'
+           WHEN LOWER(messages) LIKE '%system prompt%'
+             OR messages LIKE '%系统提示词%'
+             THEN 'prompt_extraction'
+           ELSE 'none'
+         END AS injection_type
+  FROM hook_before_agent_start
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE messages IS NOT NULL AND messages <> '' AND messages <> '[]'
+) WHERE injection_type <> 'none'
+
+UNION ALL
+
+-- Source 3: Tool params leak
+SELECT 'tool_params' AS alert_source,
+       leak_type AS alert_type,
+       agent_id AS entity_id,
+       SUBSTRING(params, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT agent_id, params, `timestamp`,
+         CASE
+           WHEN params LIKE '%AKIA%' THEN 'aws_key'
+           WHEN params LIKE '%sk-proj-%' OR params LIKE '%sk-live-%' THEN 'openai_key'
+           WHEN params LIKE '%BEGIN RSA PRIVATE KEY%' THEN 'private_key'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_before_tool_call
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE tool_name IN ('write', 'read')
+) WHERE leak_type <> 'none';
+
+-- ============================================================
+-- 11. Risk Control: Streaming Detection Jobs
+-- ============================================================
+-- Submit as background Flink jobs that continuously write detection results
+-- to Fluss result tables.
+--
+-- Usage (submit as background job):
+--   docker compose cp scripts/demo.sql jobmanager:/tmp/demo.sql
+--   docker compose exec -d jobmanager ./bin/sql-client.sh -f /tmp/demo.sql
+--
+-- Check job status: http://localhost:8083
+
+-- ── 11a. Create result tables ───────────────────────────────
+
+CREATE TABLE IF NOT EXISTS risk_dangerous_commands (
+  agent_id STRING,
+  session_key STRING,
+  command STRING,
+  risk_level STRING,
+  risk_type STRING,
+  detected_at BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS risk_sensitive_leaks (
+  alert_source STRING,
+  alert_type STRING,
+  entity_id STRING,
+  content_preview STRING,
+  detected_at BIGINT
+);
+
+-- ── 11b. Job: Dangerous command real-time detection ─────────
+-- Detect dangerous command patterns from hook_before_tool_call exec tool
+
+INSERT INTO risk_dangerous_commands
+SELECT agent_id,
+       session_key,
+       JSON_VALUE(params, '$.command') AS command,
+       CASE
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -rf%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -r /%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rmdir /%'
+           THEN 'HIGH'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%sudo %'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chmod 777%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chown root%'
+           THEN 'HIGH'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%mkfs%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%dd if=%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%> /dev/sd%'
+           THEN 'HIGH'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%sh%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%bash%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%sh%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%bash%'
+           THEN 'MEDIUM'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/passwd%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/shadow%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/id_rsa%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/authorized_keys%'
+           THEN 'MEDIUM'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%printenv%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%env | grep%'
+           THEN 'MEDIUM'
+         ELSE 'SKIP'
+       END AS risk_level,
+       CASE
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -rf%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -r /%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rmdir /%'
+           THEN 'file_destruction'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%sudo %'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chmod 777%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chown root%'
+           THEN 'privilege_escalation'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%mkfs%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%dd if=%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%> /dev/sd%'
+           THEN 'system_destruction'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%sh%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%bash%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%sh%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%bash%'
+           THEN 'remote_code_execution'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/passwd%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/shadow%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/id_rsa%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/authorized_keys%'
+           THEN 'sensitive_file_access'
+         WHEN LOWER(JSON_VALUE(params, '$.command')) LIKE '%printenv%'
+           OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%env | grep%'
+           THEN 'env_leak'
+         ELSE 'unknown'
+       END AS risk_type,
+       `timestamp`
+FROM hook_before_tool_call
+  /*+ OPTIONS('scan.startup.mode'='earliest') */
+WHERE tool_name = 'exec'
+  AND (
+    LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -rf%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rm -r /%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%rmdir /%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%sudo %'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chmod 777%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%chown root%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%mkfs%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%dd if=%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%> /dev/sd%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%sh%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%curl%|%bash%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%sh%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%wget%|%bash%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/passwd%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%/etc/shadow%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/id_rsa%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%.ssh/authorized_keys%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%printenv%'
+    OR LOWER(JSON_VALUE(params, '$.command')) LIKE '%env | grep%'
+  );
+
+-- ── 11c. Job: Sensitive leaks + Prompt injection detection ──
+-- Merge 3 sources: user messages + prompt injection + tool params
+
+INSERT INTO risk_sensitive_leaks
+
+-- Source 1: Sensitive info in user messages
+SELECT 'user_message' AS alert_source,
+       leak_type AS alert_type,
+       from_id AS entity_id,
+       SUBSTRING(content, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT from_id, content, `timestamp`,
+         CASE
+           WHEN content LIKE '%AKIA%' THEN 'aws_key'
+           WHEN content LIKE '%sk-proj-%' OR content LIKE '%sk-live-%' THEN 'openai_key'
+           WHEN content LIKE '%LTAI%' THEN 'alicloud_key'
+           WHEN content LIKE '%BEGIN RSA PRIVATE KEY%'
+             OR content LIKE '%BEGIN OPENSSH PRIVATE KEY%' THEN 'private_key'
+           WHEN LOWER(content) LIKE '%mysql://%'
+             OR LOWER(content) LIKE '%postgres://%' THEN 'db_credential'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_message_received
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+) WHERE leak_type <> 'none'
+
+UNION ALL
+
+-- Source 2: Prompt injection
+SELECT 'prompt_injection' AS alert_source,
+       injection_type AS alert_type,
+       agent_id AS entity_id,
+       SUBSTRING(messages, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT agent_id, messages, `timestamp`,
+         CASE
+           WHEN LOWER(messages) LIKE '%ignore previous instructions%'
+             THEN 'instruction_override'
+           WHEN messages LIKE '%忽略之前的指令%'
+             THEN 'instruction_override_zh'
+           WHEN LOWER(messages) LIKE '%system prompt%'
+             OR messages LIKE '%系统提示词%'
+             THEN 'prompt_extraction'
+           WHEN LOWER(messages) LIKE '%you are now%'
+             THEN 'role_hijack'
+           ELSE 'none'
+         END AS injection_type
+  FROM hook_before_agent_start
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE messages IS NOT NULL AND messages <> '' AND messages <> '[]'
+) WHERE injection_type <> 'none'
+
+UNION ALL
+
+-- Source 3: Sensitive info in tool params
+SELECT 'tool_params' AS alert_source,
+       leak_type AS alert_type,
+       agent_id AS entity_id,
+       SUBSTRING(params, 1, 80) AS content_preview,
+       `timestamp`
+FROM (
+  SELECT agent_id, params, `timestamp`,
+         CASE
+           WHEN params LIKE '%AKIA%' THEN 'aws_key'
+           WHEN params LIKE '%sk-proj-%' OR params LIKE '%sk-live-%' THEN 'openai_key'
+           WHEN params LIKE '%BEGIN RSA PRIVATE KEY%' THEN 'private_key'
+           ELSE 'none'
+         END AS leak_type
+  FROM hook_before_tool_call
+    /*+ OPTIONS('scan.startup.mode'='earliest') */
+  WHERE tool_name IN ('write', 'read')
+) WHERE leak_type <> 'none';
