@@ -4,11 +4,10 @@ import type { EventSink } from "./sink.js";
 const MAX_BUFFER_SIZE_PER_TABLE = 10000;
 
 /**
- * Multi-table in-memory buffer with batch flushing to Fluss.
+ * 多表内存缓冲区，批量刷写到 Fluss。
  *
- * Each hook type has its own buffer. Rows are flushed either when
- * the batch size is reached or on a regular interval.
- * All errors are caught and logged without blocking the event flow.
+ * 每种 hook 类型拥有独立的缓冲区。当批次大小达到阈值或定时器触发时执行刷写。
+ * 所有错误会被捕获并记录日志，不会阻塞事件流。
  */
 export class MultiTableBuffer {
   private buffers: Map<PluginHookName, Record<string, unknown>[]> = new Map();
@@ -29,8 +28,8 @@ export class MultiTableBuffer {
   }
 
   /**
-   * Push a row into the buffer for a specific hook table.
-   * Triggers an async flush if the batch size threshold is reached.
+   * 将一行数据推入指定 hook 表的缓冲区。
+   * 当批次大小达到阈值时触发异步刷写。
    */
   push(hookName: PluginHookName, row: Record<string, unknown>): void {
     let buffer = this.buffers.get(hookName);
@@ -54,7 +53,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * Start the periodic flush timer.
+   * 启动定时刷写计时器。
    */
   start(): void {
     if (this.timer) return;
@@ -69,21 +68,27 @@ export class MultiTableBuffer {
   }
 
   /**
-   * Stop the periodic flush timer, perform a final flush, and close the client.
+   * 清除定时刷写计时器，不执行最终刷写。
    */
-  async stop(): Promise<void> {
+  clearTimer(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
+  }
 
+  /**
+   * 停止定时刷写计时器，执行最终刷写并关闭客户端。
+   */
+  async stop(): Promise<void> {
+    this.clearTimer();
     await this.flushAll();
     this.sink.close();
     this.logger.info("[fluss-hook] Buffer stopped");
   }
 
   /**
-   * Flush all tables that have buffered rows.
+   * 刷写所有有缓冲数据的表。
    */
   async flushAll(): Promise<void> {
     const hookNames = Array.from(this.buffers.keys());
@@ -91,7 +96,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * Flush buffered rows for a specific hook table.
+   * 刷写指定 hook 表的缓冲数据。
    */
   async flushTable(hookName: PluginHookName): Promise<void> {
     const buffer = this.buffers.get(hookName);

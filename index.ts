@@ -32,7 +32,7 @@ import {
   mapGatewayStop,
 } from "./src/event-mappers.js";
 
-// ── Module-level singleton state ──────────────────────────────────────
+// ── 模块级单例状态 ───────────────────────────────────────────────────
 // OpenClaw 在启动过程中可能多次调用 register()（如 reloadDeferredGatewayPlugins 与首次加载
 // 的 cache key 不一致时会绕过缓存）。所有 register() 调用共享同一个 buffer/sink，确保：
 // 1. 每次注册都能在新 registry 中安装 handlers（避免 global hook runner 被替换后 handlers 丢失）
@@ -43,9 +43,15 @@ let singletonBuffer: MultiTableBuffer | null = null;
 let singletonSink: EventSink | null = null;
 let singletonRecordingSink: RecordingSink | null = null;
 let singletonServiceRegistered = false;
+let singletonConfig: ReturnType<typeof resolveConfig> | null = null;
 
 function ensureSingleton(config: ReturnType<typeof resolveConfig>, logger: OpenClawPluginApi["logger"]): MultiTableBuffer {
-  if (singletonBuffer) return singletonBuffer;
+  if (singletonBuffer) {
+    if (singletonConfig && singletonConfig.outputMode !== config.outputMode) {
+      logger.warn(`[fluss-hook] re-register detected with different outputMode (was=${singletonConfig.outputMode}, now=${config.outputMode}), reusing existing singleton`);
+    }
+    return singletonBuffer;
+  }
 
   let sink: EventSink;
   let recordingSink: RecordingSink | undefined;
@@ -67,19 +73,24 @@ function ensureSingleton(config: ReturnType<typeof resolveConfig>, logger: OpenC
 
   singletonSink = sink;
   singletonRecordingSink = recordingSink ?? null;
+  singletonConfig = config;
   singletonBuffer = new MultiTableBuffer(sink, config, logger);
   return singletonBuffer;
 }
 
-/** Test-only: reset singleton state so each test starts fresh. */
+/** 仅用于测试：重置单例状态，确保每个测试用例从干净状态开始。 */
 export function __testResetSingleton(): void {
+  if (singletonBuffer) {
+    singletonBuffer.clearTimer();
+  }
   singletonBuffer = null;
   singletonSink = null;
   singletonRecordingSink = null;
+  singletonConfig = null;
   singletonServiceRegistered = false;
 }
 
-// ── Plugin definition ─────────────────────────────────────────────────
+// ── 插件定义 ─────────────────────────────────────────────────────────
 
 const plugin: FlussHookPlugin = {
   id: "fluss-hook",
@@ -90,13 +101,13 @@ const plugin: FlussHookPlugin = {
     const config = resolveConfig(api.pluginConfig);
     const buffer = ensureSingleton(config, api.logger);
 
-    // Expose for testing
+    // 暴露给测试使用
     plugin.__testBuffer = { flushAll: () => buffer.flushAll() };
     if (singletonRecordingSink) {
       plugin.__recordingSink = singletonRecordingSink;
     }
 
-    // -- Agent Hooks --
+    // -- Agent 钩子 --
     api.on("before_model_resolve", (event, ctx) => {
       buffer.push("before_model_resolve", mapBeforeModelResolve(event, ctx));
     });
@@ -133,7 +144,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("llm_output", mapLlmOutput(event, ctx));
     });
 
-    // -- Message Hooks --
+    // -- 消息钩子 --
     api.on("inbound_claim", (event, ctx) => {
       buffer.push("inbound_claim", mapInboundClaim(event, ctx));
     });
@@ -158,7 +169,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("before_message_write", mapBeforeMessageWrite(event, ctx));
     });
 
-    // -- Tool Hooks --
+    // -- 工具钩子 --
     api.on("before_tool_call", (event, ctx) => {
       buffer.push("before_tool_call", mapBeforeToolCall(event, ctx));
     });
@@ -171,7 +182,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("tool_result_persist", mapToolResultPersist(event, ctx));
     });
 
-    // -- Session Hooks --
+    // -- 会话钩子 --
     api.on("session_start", (event, ctx) => {
       buffer.push("session_start", mapSessionStart(event, ctx));
     });
@@ -180,7 +191,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("session_end", mapSessionEnd(event, ctx));
     });
 
-    // -- Subagent Hooks --
+    // -- 子 Agent 钩子 --
     api.on("subagent_spawning", (event, ctx) => {
       buffer.push("subagent_spawning", mapSubagentSpawning(event, ctx));
     });
@@ -197,7 +208,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("subagent_ended", mapSubagentEnded(event, ctx));
     });
 
-    // -- Gateway Hooks --
+    // -- 网关钩子 --
     api.on("gateway_start", (event, ctx) => {
       buffer.push("gateway_start", mapGatewayStart(event, ctx));
     });
@@ -206,7 +217,7 @@ const plugin: FlussHookPlugin = {
       buffer.push("gateway_stop", mapGatewayStop(event, ctx));
     });
 
-    // Only register service once — OpenClaw rejects duplicate service IDs
+    // 服务只注册一次 —— OpenClaw 会拒绝重复的 service ID
     if (!singletonServiceRegistered) {
       singletonServiceRegistered = true;
       api.registerService({

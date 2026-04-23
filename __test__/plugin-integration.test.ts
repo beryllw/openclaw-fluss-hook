@@ -744,44 +744,32 @@ describe("all 26 hooks through plugin lifecycle", () => {
   });
 
   it("all 26 hook handlers are safe (do not throw)", () => {
-    __testResetSingleton();
-    const api2 = {
-      pluginConfig: testConfig,
-      logger: createLogger(),
-      on: vi.fn(),
-      registerService: vi.fn(),
-    };
-    plugin.register(api2);
-    const h = (api2.on as ReturnType<typeof vi.fn>).mock.calls.reduce<Record<string, Function>>(
-      (acc, [name, handler]) => { acc[name] = handler; return acc; }, {}
-    );
-
-    expect(() => h.before_model_resolve({ prompt: "p" }, {})).not.toThrow();
-    expect(() => h.before_prompt_build({ prompt: "p" }, {})).not.toThrow();
-    expect(() => h.before_agent_start({ prompt: "p" }, {})).not.toThrow();
-    expect(() => h.agent_end({ messages: [], success: true }, {})).not.toThrow();
-    expect(() => h.before_compaction({ messageCount: 1 }, {})).not.toThrow();
-    expect(() => h.after_compaction({ messageCount: 1, compactedCount: 0 }, {})).not.toThrow();
-    expect(() => h.before_reset({}, {})).not.toThrow();
-    expect(() => h.llm_input({ runId: "", sessionId: "", provider: "", model: "", prompt: "", historyMessages: [], imagesCount: 0 }, {})).not.toThrow();
-    expect(() => h.llm_output({ runId: "", sessionId: "", provider: "", model: "", assistantTexts: [] }, {})).not.toThrow();
-    expect(() => h.inbound_claim({ content: "", channel: "web", isGroup: false }, {})).not.toThrow();
-    expect(() => h.before_dispatch({ content: "" }, {})).not.toThrow();
-    expect(() => h.message_received({ from: "", content: "" }, {})).not.toThrow();
-    expect(() => h.message_sending({ to: "", content: "" }, {})).not.toThrow();
-    expect(() => h.message_sent({ to: "", content: "", success: true }, {})).not.toThrow();
-    expect(() => h.before_message_write({ message: "" }, {})).not.toThrow();
-    expect(() => h.before_tool_call({ toolName: "", params: {} }, {})).not.toThrow();
-    expect(() => h.after_tool_call({ toolName: "", params: {} }, {})).not.toThrow();
-    expect(() => h.tool_result_persist({ message: "" }, {})).not.toThrow();
-    expect(() => h.session_start({ sessionId: "" }, {})).not.toThrow();
-    expect(() => h.session_end({ sessionId: "", messageCount: 0 }, {})).not.toThrow();
-    expect(() => h.subagent_spawning({ childSessionKey: "", agentId: "", mode: "run", threadRequested: false }, {})).not.toThrow();
-    expect(() => h.subagent_delivery_target({ childSessionKey: "", requesterSessionKey: "", expectsCompletionMessage: false }, {})).not.toThrow();
-    expect(() => h.subagent_spawned({ childSessionKey: "", agentId: "", mode: "run", threadRequested: false, runId: "" }, {})).not.toThrow();
-    expect(() => h.subagent_ended({ targetSessionKey: "", targetKind: "", reason: "" }, {})).not.toThrow();
-    expect(() => h.gateway_start({ port: 0 }, {})).not.toThrow();
-    expect(() => h.gateway_stop({}, {})).not.toThrow();
+    expect(() => handlers.before_model_resolve({ prompt: "p" }, {})).not.toThrow();
+    expect(() => handlers.before_prompt_build({ prompt: "p" }, {})).not.toThrow();
+    expect(() => handlers.before_agent_start({ prompt: "p" }, {})).not.toThrow();
+    expect(() => handlers.agent_end({ messages: [], success: true }, {})).not.toThrow();
+    expect(() => handlers.before_compaction({ messageCount: 1 }, {})).not.toThrow();
+    expect(() => handlers.after_compaction({ messageCount: 1, compactedCount: 0 }, {})).not.toThrow();
+    expect(() => handlers.before_reset({}, {})).not.toThrow();
+    expect(() => handlers.llm_input({ runId: "", sessionId: "", provider: "", model: "", prompt: "", historyMessages: [], imagesCount: 0 }, {})).not.toThrow();
+    expect(() => handlers.llm_output({ runId: "", sessionId: "", provider: "", model: "", assistantTexts: [] }, {})).not.toThrow();
+    expect(() => handlers.inbound_claim({ content: "", channel: "web", isGroup: false }, {})).not.toThrow();
+    expect(() => handlers.before_dispatch({ content: "" }, {})).not.toThrow();
+    expect(() => handlers.message_received({ from: "", content: "" }, {})).not.toThrow();
+    expect(() => handlers.message_sending({ to: "", content: "" }, {})).not.toThrow();
+    expect(() => handlers.message_sent({ to: "", content: "", success: true }, {})).not.toThrow();
+    expect(() => handlers.before_message_write({ message: "" }, {})).not.toThrow();
+    expect(() => handlers.before_tool_call({ toolName: "", params: {} }, {})).not.toThrow();
+    expect(() => handlers.after_tool_call({ toolName: "", params: {} }, {})).not.toThrow();
+    expect(() => handlers.tool_result_persist({ message: "" }, {})).not.toThrow();
+    expect(() => handlers.session_start({ sessionId: "" }, {})).not.toThrow();
+    expect(() => handlers.session_end({ sessionId: "", messageCount: 0 }, {})).not.toThrow();
+    expect(() => handlers.subagent_spawning({ childSessionKey: "", agentId: "", mode: "run", threadRequested: false }, {})).not.toThrow();
+    expect(() => handlers.subagent_delivery_target({ childSessionKey: "", requesterSessionKey: "", expectsCompletionMessage: false }, {})).not.toThrow();
+    expect(() => handlers.subagent_spawned({ childSessionKey: "", agentId: "", mode: "run", threadRequested: false, runId: "" }, {})).not.toThrow();
+    expect(() => handlers.subagent_ended({ targetSessionKey: "", targetKind: "", reason: "" }, {})).not.toThrow();
+    expect(() => handlers.gateway_start({ port: 0 }, {})).not.toThrow();
+    expect(() => handlers.gateway_stop({}, {})).not.toThrow();
   });
 });
 
