@@ -4,10 +4,11 @@ import type { EventSink } from "./sink.js";
 const MAX_BUFFER_SIZE_PER_TABLE = 10000;
 
 /**
- * 多表内存缓冲区，批量刷写到 Fluss。
+ * Multi-table in-memory buffer with batch flushing to Fluss.
  *
- * 每种 hook 类型拥有独立的缓冲区。当批次大小达到阈值或定时器触发时执行刷写。
- * 所有错误会被捕获并记录日志，不会阻塞事件流。
+ * Each hook type has its own buffer. Rows are flushed either when
+ * the batch size is reached or on a regular interval.
+ * All errors are caught and logged without blocking the event flow.
  */
 export class MultiTableBuffer {
   private buffers: Map<PluginHookName, Record<string, unknown>[]> = new Map();
@@ -28,8 +29,8 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 将一行数据推入指定 hook 表的缓冲区。
-   * 当批次大小达到阈值时触发异步刷写。
+   * Push a row into the buffer for a specific hook table.
+   * Triggers an async flush if the batch size threshold is reached.
    */
   push(hookName: PluginHookName, row: Record<string, unknown>): void {
     let buffer = this.buffers.get(hookName);
@@ -53,7 +54,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 启动定时刷写计时器。
+   * Start the periodic flush timer.
    */
   start(): void {
     if (this.timer) return;
@@ -68,7 +69,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 清除定时刷写计时器，不执行最终刷写。
+   * Clear the periodic flush timer without performing a final flush.
    */
   clearTimer(): void {
     if (this.timer) {
@@ -78,7 +79,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 停止定时刷写计时器，执行最终刷写并关闭客户端。
+   * Stop the periodic flush timer, perform a final flush, and close the client.
    */
   async stop(): Promise<void> {
     this.clearTimer();
@@ -88,7 +89,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 刷写所有有缓冲数据的表。
+   * Flush all tables that have buffered rows.
    */
   async flushAll(): Promise<void> {
     const hookNames = Array.from(this.buffers.keys());
@@ -96,7 +97,7 @@ export class MultiTableBuffer {
   }
 
   /**
-   * 刷写指定 hook 表的缓冲数据。
+   * Flush buffered rows for a specific hook table.
    */
   async flushTable(hookName: PluginHookName): Promise<void> {
     const buffer = this.buffers.get(hookName);
