@@ -1,15 +1,15 @@
 # OpenClaw + Fluss + Flink SQL Demo
 
-End-to-end demonstration: user chats with OpenClaw AI, all hook events are synced to Apache Fluss in real-time via `fluss-hook` plugin, and Flink SQL queries the event streams across 14 dedicated tables.
+End-to-end demonstration: user chats with OpenClaw AI, all hook events are synced to Apache Fluss in real-time via `fluss-hook` plugin, and Flink SQL queries the event streams across dedicated tables.
 
 ## Architecture
 
 ```
 User --> OpenClaw Gateway --> fluss-hook --> Fluss Gateway --> Fluss Cluster <-- Flink SQL
-              :18789          (14 hooks)     REST API :8080   coordinator:9123    :8083
+              :18789          (26 hooks)     REST API :8080   coordinator:9123    :8083
 ```
 
-Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `hook_before_tool_call`). Tables are lazily created on first event arrival.
+Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `hook_llm_output`). Tables are lazily created on first event arrival.
 
 ## Prerequisites
 
@@ -23,7 +23,21 @@ Each hook event type is written to its own Fluss table (e.g. `hook_agent_end`, `
 ./scripts/setup.sh
 ```
 
-### 2. Configure LLM API Key
+### 2. Build Fluss Gateway Image
+
+Download the pre-built `fluss-gateway` binary for your platform from the [fluss-gateway releases](https://github.com/beryllw/fluss-gateway/releases), then build the Docker image:
+
+```bash
+# Example for aarch64-linux (adjust for your platform)
+tar xzf fluss-gateway-aarch64-linux.tar.gz
+cp fluss-gateway demo/
+docker build -t fluss-gateway:latest -f demo/Dockerfile.fluss-gateway demo/
+rm demo/fluss-gateway
+```
+
+> **Note**: The `fluss-gateway` binary requires GLIBC >= 2.38. The `Dockerfile.fluss-gateway` uses `debian:trixie-slim` (GLIBC 2.41) as the base image. Using `debian:bookworm-slim` (GLIBC 2.36) will cause a startup failure.
+
+### 3. Configure LLM API Key
 
 Edit `.env` and set at least one LLM provider key:
 
@@ -33,7 +47,7 @@ BAILIAN_API_KEY=sk-...
 
 The default model configuration uses `qwen3.5-plus` and `qwen3-coder-plus`. To use other providers, modify `config/openclaw.json`.
 
-### 3. Build & Start
+### 4. Build & Start
 
 ```bash
 # Build the image (pulls official OpenClaw image, layers plugin on top — fast)
@@ -43,23 +57,61 @@ The default model configuration uses `qwen3.5-plus` and `qwen3-coder-plus`. To u
 docker compose up -d
 ```
 
-### 4. Verify Services
+### 5. Verify Services
 
 ```bash
 docker compose ps
 
 # Check fluss-hook plugin loaded
 docker compose logs openclaw | grep fluss-hook
-# Expected: "[fluss-hook] Plugin registered (14 hooks)"
+# Expected: "[fluss-hook] Plugin registered (26 hooks, output=fluss)"
+# Expected: "[fluss-hook] Buffer started (batchSize=10, flushInterval=3000ms)"
 ```
+
+> **Note**: If the plugin logs show "fetch failed" for database setup, it means the Fluss Gateway was not ready when OpenClaw started. Restart the openclaw container: `docker compose restart openclaw`
 
 ## Demo Walkthrough
 
 ### Step 1: Chat with OpenClaw
 
-Open http://localhost:18789 and send a few messages. Each interaction triggers multiple hook events (agent start/end, tool calls, session start, etc.) which are captured and written to Fluss.
+**Option A: Web UI**
 
-### Step 2: Query Events with Flink SQL
+Open http://localhost:18789 and send a few messages. Each interaction triggers multiple hook events (agent start/end, LLM input/output, message write, etc.) which are captured and written to Fluss.
+
+**Option B: CLI (headless, for CI/testing)**
+
+```bash
+# Send a message through the gateway (triggers all hooks)
+docker compose exec openclaw node dist/index.js agent \
+  --session-id test-001 \
+  --message "Hello, reply briefly" \
+  --json --timeout 60
+```
+
+> **Important**: Do **not** use the `--local` flag — it runs the embedded agent locally and bypasses the gateway, so no hook events are fired.
+
+### Step 2: Verify Data in Fluss
+
+After sending messages, wait a few seconds for the buffer to flush (default `flushIntervalMs: 3000`), then verify via the Fluss Gateway REST API:
+
+```bash
+# List databases
+curl -s http://localhost:8080/v1/_databases
+# Expected: ["openclaw","fluss"]
+
+# List tables
+curl -s http://localhost:8080/v1/openclaw/_tables
+# Expected: ["hook_gateway_start","hook_before_agent_start","hook_agent_end",...]
+
+# Scan a table
+curl -s -X POST http://localhost:8080/v1/openclaw/hook_agent_end/scan \
+  -H "Content-Type: application/json" -d '{"limit": 5}'
+
+# Get table schema
+curl -s http://localhost:8080/v1/openclaw/hook_agent_end/_info
+```
+
+### Step 3: Query Events with Flink SQL
 
 ```bash
 docker compose exec jobmanager ./bin/sql-client.sh
@@ -80,12 +132,12 @@ SHOW TABLES;
 After sending messages, you should see tables like:
 
 ```
-hook_before_agent_start, hook_agent_end, hook_before_tool_call,
-hook_after_tool_call, hook_tool_result_persist, hook_message_received,
-hook_session_start, hook_gateway_start, ...
+hook_gateway_start, hook_before_agent_start, hook_agent_end,
+hook_before_model_resolve, hook_before_prompt_build,
+hook_before_message_write, hook_llm_input, hook_llm_output, ...
 ```
 
-### Step 3: Query Individual Tables
+### Step 4: Query Individual Tables
 
 ```sql
 SET 'execution.runtime-mode' = 'streaming';
@@ -123,26 +175,26 @@ FROM hook_before_tool_call
 GROUP BY tool_name;
 ```
 
-See `scripts/demo.sql` for the full set of queries covering all 14 tables.
+See `scripts/demo.sql` for the full set of queries.
 
-### Step 4: Observe Real-Time Sync
+### Step 5: Observe Real-Time Sync
 
 Keep a Flink SQL streaming query running, then send new messages in the OpenClaw UI. New rows appear within seconds.
 
 ## Expected Tables
 
-Tables are lazily created when the first event of each type arrives. In a typical webchat session:
+Tables are lazily created when the first event of each type arrives. In a typical chat session via CLI or Web UI:
 
-| Always created (8) | Conditionally created (6) |
-|-------------------|--------------------------|
-| `hook_before_agent_start` | `hook_before_compaction` (long conversations) |
-| `hook_agent_end` | `hook_after_compaction` (long conversations) |
-| `hook_before_tool_call` | `hook_message_sending` (external channels) |
-| `hook_after_tool_call` | `hook_message_sent` (external channels) |
-| `hook_tool_result_persist` | `hook_session_end` (explicit session end) |
-| `hook_message_received` | `hook_gateway_stop` (gateway shutdown) |
-| `hook_session_start` | |
-| `hook_gateway_start` | |
+| Always created (8) | Conditionally created |
+|-------------------|-----------------------|
+| `hook_gateway_start` | `hook_before_tool_call` (when agent uses tools) |
+| `hook_before_agent_start` | `hook_after_tool_call` (when agent uses tools) |
+| `hook_agent_end` | `hook_tool_result_persist` (when agent uses tools) |
+| `hook_before_model_resolve` | `hook_before_compaction` (long conversations) |
+| `hook_before_prompt_build` | `hook_after_compaction` (long conversations) |
+| `hook_before_message_write` | `hook_session_end` (explicit session end) |
+| `hook_llm_input` | `hook_gateway_stop` (gateway shutdown) |
+| `hook_llm_output` | `hook_message_sending` / `hook_message_sent` (external channels) |
 
 ## Services
 
@@ -185,6 +237,20 @@ The plugin config in `config/openclaw.json`:
 | `flushIntervalMs` | Periodic flush interval in ms |
 
 ## Troubleshooting
+
+### Fluss Gateway: "GLIBC_2.38 not found"
+
+The `fluss-gateway` binary (v0.1.4+) requires GLIBC >= 2.38. Ensure the Docker image uses `debian:trixie-slim` (GLIBC 2.41) or newer as the base. Using `debian:bookworm-slim` (GLIBC 2.36) will not work.
+
+### Plugin "fetch failed" / "Operation exhausted for database setup"
+
+The fluss-hook plugin failed to connect to the Fluss Gateway during startup. This happens when the gateway is not yet ready. Fix: restart the openclaw container after all services are healthy:
+
+```bash
+docker compose restart openclaw
+docker compose logs openclaw | grep fluss-hook
+# Verify: "Buffer started (batchSize=10, flushInterval=3000ms)"
+```
 
 ### "Invalid config: must NOT have additional properties"
 

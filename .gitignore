@@ -44,5 +44,6 @@ temp/
 # Demo runtime files
 demo/flink-lib/*.jar
 !demo/flink-lib/.gitkeep
+demo/fluss-gateway
 
 
